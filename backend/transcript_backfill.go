@@ -165,13 +165,17 @@ func transcriptBackfillPath(storageRoot string, target transcriptBackfillTarget)
 func transcriptMIMEType(name, kind string) string {
 	ext := strings.ToLower(filepath.Ext(name))
 	switch ext {
-	case ".m4a", ".mp4":
+	case ".m4a":
+		return "video/mp4"
+	case ".mp4":
 		if strings.Contains(kind, "video") {
 			return "video/mp4"
 		}
 		return "audio/mp4"
 	case ".aiff", ".aif":
 		return "audio/aiff"
+	case ".weba":
+		return "video/webm"
 	case ".webm":
 		if strings.Contains(kind, "video") {
 			return "video/webm"

@@ -92,3 +92,12 @@ func TestTranscriptBackfillProcessesEachMediaOnce(t *testing.T) {
 		t.Fatalf("backfill is not idempotent: %+v, %v", second, err)
 	}
 }
+
+func TestTranscriptMIMETypeHandlesBrowserRecordingContainers(t *testing.T) {
+	if got := transcriptMIMEType("recording.weba", "voice_update"); got != "video/webm" {
+		t.Fatalf("weba MIME = %q", got)
+	}
+	if got := transcriptMIMEType("recording.m4a", "archived_answer"); got != "video/mp4" {
+		t.Fatalf("m4a MIME = %q", got)
+	}
+}
