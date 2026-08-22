@@ -149,7 +149,7 @@ func TestCoreJobAdminConfigurationAndRecipientAPI(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	server := httptest.NewServer(newApp(store, stubAudioProcessor{}, filepath.Join(temp, "media"), "family-token").routes())
+	server := httptest.NewServer(newApp(store, stubAudioProcessor{}, filepath.Join(temp, "media"), "admin-token").routes())
 	t.Cleanup(server.Close)
 
 	request, _ := http.NewRequest(http.MethodPut, server.URL+"/api/v1/admin/core-job-rules/elder", nil)
@@ -176,14 +176,14 @@ func TestCoreJobAdminConfigurationAndRecipientAPI(t *testing.T) {
 	notifications := requestScopedJSON[struct {
 		Notifications []Notification `json:"notifications"`
 	}](t, server.Client(), http.MethodGet, server.URL+"/api/v1/notifications?memberId=family", nil,
-		"X-Family-Token", "family-token", http.StatusOK)
+		"X-Admin-Token", "admin-token", http.StatusOK)
 	if len(notifications.Notifications) != 1 || notifications.Notifications[0].RecipientMemberID != "family" {
 		t.Fatalf("unexpected notifications: %+v", notifications.Notifications)
 	}
 	subjectNotifications := requestScopedJSON[struct {
 		Notifications []Notification `json:"notifications"`
 	}](t, server.Client(), http.MethodGet, server.URL+"/api/v1/notifications?memberId=elder", nil,
-		"X-Family-Token", "family-token", http.StatusOK)
+		"X-Admin-Token", "admin-token", http.StatusOK)
 	if len(subjectNotifications.Notifications) != 1 || subjectNotifications.Notifications[0].RecipientMemberID != "elder" {
 		t.Fatalf("unexpected subject notifications: %+v", subjectNotifications.Notifications)
 	}

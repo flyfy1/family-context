@@ -100,7 +100,7 @@ func TestScheduledJobAdminCRUD(t *testing.T) {
 	if err := store.createMember(context.Background(), member); err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(newApp(store, stubAudioProcessor{}, filepath.Join(temp, "media"), "family-token").routes())
+	server := httptest.NewServer(newApp(store, stubAudioProcessor{}, filepath.Join(temp, "media"), "admin-token").routes())
 	t.Cleanup(server.Close)
 
 	job := requestScopedJSON[ScheduledJob](t, server.Client(), http.MethodPost, server.URL+"/api/v1/admin/scheduled-jobs", map[string]any{

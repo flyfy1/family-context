@@ -5,16 +5,15 @@
 
 ## 权限模型
 
-后端现在有三种权限：
+后端现在有三种权限，已不再提供家庭共享访问令牌：
 
 | 权限 | 凭证 | 能力 |
 |---|---|---|
 | 管理员 | `X-Admin-Token` | 创建和修改成员、签发成员令牌、查看家庭数据、修改 Update 可见范围 |
-| 家庭网页 PoC | `X-Family-Token` | 使用当前家庭网页和旧版问答接口 |
-| 家庭成员 | 用户名/密码换取 `Authorization: Bearer <web-session>` | 登录网页、访问自己的 Space、上传内容、配置分享策略 |
+| 家庭成员 | 用户名/密码换取 `Authorization: Bearer <member-session>` | 登录网页或 Android、使用家庭功能、访问自己的 Space、上传内容、配置分享策略 |
 | 成员集成 | `Authorization: Bearer <member-token>` | 手机同步或签发独立 MCP 会话；不作为家人日常网页登录方式 |
 
-生产环境要求 `ADMIN_API_TOKEN` 与 `FAMILY_API_TOKEN` 不同。成员令牌在数据库中只保存 SHA-256 哈希；明文只会在管理员创建成员或轮换令牌时返回一次。
+生产环境必须配置独立的 `ADMIN_API_TOKEN`。成员令牌和登录会话在数据库中只保存 SHA-256 哈希；明文只会在签发时返回。旧的 `FAMILY_API_TOKEN` 和 `X-Family-Token` 不再读取或接受。
 
 ## 成员网页登录
 

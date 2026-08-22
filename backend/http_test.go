@@ -45,7 +45,7 @@ func TestQuestionAnswerPublishReplyLoop(t *testing.T) {
 	_, _ = part.Write([]byte("fake audio bytes"))
 	_ = writer.Close()
 	req, _ := http.NewRequest(http.MethodPost, server.URL+"/api/v1/questions/"+question.ID+"/answer", &body)
-	req.Header.Set("X-Family-Token", "test-token")
+	req.Header.Set("X-Admin-Token", "test-token")
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	resp, err := server.Client().Do(req)
 	if err != nil {
@@ -76,7 +76,7 @@ func TestQuestionAnswerPublishReplyLoop(t *testing.T) {
 	}
 }
 
-func TestRequiresFamilyToken(t *testing.T) {
+func TestRequiresMemberLoginOrAdminToken(t *testing.T) {
 	t.Parallel()
 	temp := t.TempDir()
 	store, err := openStore(filepath.Join(temp, "test.db"))
@@ -93,6 +93,19 @@ func TestRequiresFamilyToken(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	legacyReq, err := http.NewRequest(http.MethodGet, server.URL+"/api/v1/questions", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyReq.Header.Set("X-Family-Token", "secret")
+	legacyResp, err := server.Client().Do(legacyReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer legacyResp.Body.Close()
+	if legacyResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("legacy family token status = %d, want %d", legacyResp.StatusCode, http.StatusUnauthorized)
 	}
 }
 
@@ -147,7 +160,7 @@ func TestDraftCanBeDeletedAndRecordedAgain(t *testing.T) {
 	}, http.StatusCreated)
 	answer := uploadTestAnswer(t, server.Client(), server.URL, question.ID)
 	req, _ := http.NewRequest(http.MethodPost, server.URL+"/api/v1/answers/"+answer.ID+"/archive", strings.NewReader("{}"))
-	req.Header.Set("X-Family-Token", "test-token")
+	req.Header.Set("X-Admin-Token", "test-token")
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := server.Client().Do(req)
 	if err != nil {
@@ -228,7 +241,7 @@ func uploadTestAnswer(t *testing.T, client *http.Client, serverURL, questionID s
 	_, _ = part.Write([]byte("fake audio bytes"))
 	_ = writer.Close()
 	req, _ := http.NewRequest(http.MethodPost, serverURL+"/api/v1/questions/"+questionID+"/answer", &body)
-	req.Header.Set("X-Family-Token", "test-token")
+	req.Header.Set("X-Admin-Token", "test-token")
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	resp, err := client.Do(req)
 	if err != nil {
@@ -262,7 +275,6 @@ func requestJSON[T any](t *testing.T, client *http.Client, method, url string, i
 		t.Fatal(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Family-Token", "test-token")
 	req.Header.Set("X-Admin-Token", "test-token")
 	resp, err := client.Do(req)
 	if err != nil {

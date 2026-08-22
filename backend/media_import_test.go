@@ -276,7 +276,7 @@ func familyMemberRequestJSON[T any](t *testing.T, client *http.Client, method, u
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Set("X-Family-Token", familyToken)
+	req.Header.Set("X-Admin-Token", familyToken)
 	req.Header.Set("X-Member-ID", memberID)
 	if input != nil {
 		req.Header.Set("Content-Type", "application/json")

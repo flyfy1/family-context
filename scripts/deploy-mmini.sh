@@ -41,7 +41,6 @@ mkdir -p "$HOME/.local/bin" "$HOME/.local/libexec/family-daily" "$config_root" "
 touch "$storage_root/.family-daily-storage"
 
 if [[ ! -f "$config_root/backend.env" ]]; then
-  family_token="$(openssl rand -hex 32)"
   admin_token="$(openssl rand -hex 32)"
   {
     printf "%s\n" "APP_ENV=production"
@@ -49,10 +48,14 @@ if [[ ! -f "$config_root/backend.env" ]]; then
     printf "%s\n" "FAMILY_DAILY_STORAGE_DIR=$storage_root"
     printf "%s\n" "PUBLIC_BASE_URL=https://family-api.integ.life"
     printf "%s\n" "CORS_ALLOWED_ORIGINS=https://family.integ.life,https://family-api.integ.life"
-    printf "%s\n" "FAMILY_API_TOKEN=$family_token"
     printf "%s\n" "ADMIN_API_TOKEN=$admin_token"
   } > "$config_root/backend.env"
 fi
+
+clean_env="$(mktemp "$config_root/backend.env.XXXXXX")"
+awk '!/^FAMILY_API_TOKEN=/' "$config_root/backend.env" > "$clean_env"
+chmod 600 "$clean_env"
+mv "$clean_env" "$config_root/backend.env"
 
 if ! grep -q '^PUBLIC_BASE_URL=' "$config_root/backend.env"; then
   printf "%s\n" "PUBLIC_BASE_URL=https://family-api.integ.life" >> "$config_root/backend.env"

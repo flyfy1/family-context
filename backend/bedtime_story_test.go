@@ -83,7 +83,7 @@ func TestBedtimeStoryUsesOnlySharedContextAndPersistsAudio(t *testing.T) {
 		t.Fatalf("story metadata missing: %v", err)
 	}
 	audioReq, _ := http.NewRequest(http.MethodGet, server.URL+story.AudioURL, nil)
-	audioReq.Header.Set("X-Family-Token", "test-token")
+	audioReq.Header.Set("X-Admin-Token", "test-token")
 	audioResp, err := server.Client().Do(audioReq)
 	if err != nil {
 		t.Fatal(err)

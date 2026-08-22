@@ -91,7 +91,7 @@ func memberRequestJSON[T any](t *testing.T, client *http.Client, method, url, me
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Set("X-Family-Token", "test-token")
+	req.Header.Set("X-Admin-Token", "test-token")
 	req.Header.Set("X-Member-ID", memberID)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)

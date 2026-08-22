@@ -31,7 +31,6 @@ type app struct {
 	tts         speechSynthesizer
 	mediaDir    string
 	spacesRoot  string
-	apiToken    string
 	adminToken  string
 	mcpMu       sync.Mutex
 	mcpSessions map[string]string
@@ -39,7 +38,7 @@ type app struct {
 	loginTries  map[string]loginAttempt
 }
 
-func newApp(store *store, ai audioProcessor, mediaDir, apiToken string) *app {
+func newApp(store *store, ai audioProcessor, mediaDir, adminToken string) *app {
 	spacesRoot, err := prepareSpacesRoot(filepath.Dir(mediaDir))
 	if err != nil {
 		panic(err)
@@ -64,8 +63,8 @@ func newApp(store *store, ai audioProcessor, mediaDir, apiToken string) *app {
 	if !ok {
 		tts = stubAudioProcessor{}
 	}
-	return &app{store: store, ai: ai, summarizer: summarizer, sharePolicy: sharePolicy, mediaAI: mediaAI, storyAI: storyAI, tts: tts, mediaDir: mediaDir, spacesRoot: spacesRoot, apiToken: apiToken,
-		adminToken: envOr("ADMIN_API_TOKEN", apiToken), mcpSessions: make(map[string]string), loginTries: make(map[string]loginAttempt)}
+	return &app{store: store, ai: ai, summarizer: summarizer, sharePolicy: sharePolicy, mediaAI: mediaAI, storyAI: storyAI, tts: tts, mediaDir: mediaDir, spacesRoot: spacesRoot,
+		adminToken: adminToken, mcpSessions: make(map[string]string), loginTries: make(map[string]loginAttempt)}
 }
 
 func (a *app) routes() http.Handler {
@@ -155,7 +154,7 @@ func (a *app) cors(next http.Handler) http.Handler {
 		if origin != "" && a.originAllowed(origin) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Family-Token, X-Admin-Token, X-Member-ID, Mcp-Session-Id, MCP-Protocol-Version")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Admin-Token, X-Member-ID, Mcp-Session-Id, MCP-Protocol-Version")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		}
 		if r.Method == http.MethodOptions {
@@ -180,7 +179,7 @@ func (a *app) originAllowed(origin string) bool {
 
 func (a *app) authorized(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if secureEqual(r.Header.Get("X-Family-Token"), a.apiToken) {
+		if secureEqual(r.Header.Get("X-Admin-Token"), a.adminToken) {
 			next(w, r)
 			return
 		}
@@ -194,7 +193,7 @@ func (a *app) authorized(next http.HandlerFunc) http.HandlerFunc {
 
 func (a *app) authorize(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if secureEqual(r.Header.Get("X-Family-Token"), a.apiToken) {
+		if secureEqual(r.Header.Get("X-Admin-Token"), a.adminToken) {
 			next.ServeHTTP(w, r)
 			return
 		}

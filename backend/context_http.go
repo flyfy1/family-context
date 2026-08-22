@@ -388,7 +388,7 @@ func (a *app) serveSpaceFile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "没有找到这个文件")
 		return
 	}
-	allowed := secureEqual(r.Header.Get("X-Family-Token"), a.apiToken) || secureEqual(r.Header.Get("X-Admin-Token"), a.adminToken)
+	allowed := secureEqual(r.Header.Get("X-Admin-Token"), a.adminToken)
 	if !allowed {
 		member, ok := a.authenticateMember(r)
 		if ok {

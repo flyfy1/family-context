@@ -45,17 +45,16 @@ func run() error {
 		return err
 	}
 
-	apiToken := envOr("FAMILY_API_TOKEN", "family-daily-local")
+	adminToken := envOr("ADMIN_API_TOKEN", "family-daily-admin-local")
 	if strings.EqualFold(os.Getenv("APP_ENV"), "production") {
-		adminToken := os.Getenv("ADMIN_API_TOKEN")
-		if adminToken == "" || secureEqual(adminToken, apiToken) {
-			return errors.New("production requires ADMIN_API_TOKEN distinct from FAMILY_API_TOKEN")
+		if strings.TrimSpace(os.Getenv("ADMIN_API_TOKEN")) == "" {
+			return errors.New("production requires ADMIN_API_TOKEN")
 		}
 		if !validProductionPublicBaseURL(os.Getenv("PUBLIC_BASE_URL")) {
 			return errors.New("production requires PUBLIC_BASE_URL as an HTTPS origin")
 		}
 	}
-	app := newApp(store, ai, filepath.Join(dataDir, "media"), apiToken)
+	app := newApp(store, ai, filepath.Join(dataDir, "media"), adminToken)
 	server := &http.Server{
 		Addr:              envOr("ADDR", ":8080"),
 		Handler:           app.routes(),

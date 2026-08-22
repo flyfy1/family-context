@@ -115,7 +115,7 @@ func TestVoiceUpdateIsStoredInMemberSpace(t *testing.T) {
 	_, _ = part.Write([]byte("fake audio bytes"))
 	_ = writer.Close()
 	req, _ := http.NewRequest(http.MethodPost, server.URL+"/api/v1/updates/voice", &body)
-	req.Header.Set("X-Family-Token", "test-token")
+	req.Header.Set("X-Admin-Token", "test-token")
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	resp, err := server.Client().Do(req)
 	if err != nil {
@@ -133,7 +133,7 @@ func TestVoiceUpdateIsStoredInMemberSpace(t *testing.T) {
 		t.Fatalf("unexpected voice update: %+v", update)
 	}
 	audioReq, _ := http.NewRequest(http.MethodGet, server.URL+update.AudioURL, nil)
-	audioReq.Header.Set("X-Family-Token", "test-token")
+	audioReq.Header.Set("X-Admin-Token", "test-token")
 	audioResp, err := server.Client().Do(audioReq)
 	if err != nil {
 		t.Fatal(err)
@@ -174,7 +174,7 @@ func TestImageUpdateIsStoredAndReadableFromWebFlow(t *testing.T) {
 	_, _ = part.Write([]byte("\x89PNG\r\n\x1a\nminimal"))
 	_ = writer.Close()
 	req, _ := http.NewRequest(http.MethodPost, server.URL+"/api/v1/updates/image", &body)
-	req.Header.Set("X-Family-Token", "test-token")
+	req.Header.Set("X-Admin-Token", "test-token")
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	resp, err := server.Client().Do(req)
 	if err != nil {
@@ -192,7 +192,7 @@ func TestImageUpdateIsStoredAndReadableFromWebFlow(t *testing.T) {
 		t.Fatalf("unexpected image update: %+v", update)
 	}
 	imageReq, _ := http.NewRequest(http.MethodGet, server.URL+update.MediaURL, nil)
-	imageReq.Header.Set("X-Family-Token", "test-token")
+	imageReq.Header.Set("X-Admin-Token", "test-token")
 	imageResp, err := server.Client().Do(imageReq)
 	if err != nil {
 		t.Fatal(err)
@@ -250,6 +250,6 @@ func TestMemberCreationRequiresAdminToken(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("family-only member creation status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
+		t.Fatalf("legacy family token member creation status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
 	}
 }

@@ -29,7 +29,7 @@ func (a *app) judgmentAuthorized(next http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 		}
-		if r.Header.Get("X-Family-Token") == a.apiToken {
+		if secureEqual(r.Header.Get("X-Admin-Token"), a.adminToken) {
 			member, err := a.store.judgmentMemberByID(r.Context(), strings.TrimSpace(r.Header.Get("X-Member-ID")))
 			if err == nil {
 				next(w, r.WithContext(context.WithValue(r.Context(), judgmentMemberContextKey{}, member)))
