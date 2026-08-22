@@ -59,7 +59,7 @@ export function CoreJobSettings({ apiBase, language, members, notify, refresh })
   const [selectedMemberID, setSelectedMemberID] = useState("");
   const [rules, setRules] = useState({});
   const [scheduledJobs, setScheduledJobs] = useState([]);
-  const [draft, setDraft] = useState({ enabled: false, includeTarget: false, inactivityHours: 24, reminderText: "" });
+  const [draft, setDraft] = useState({ enabled: false, recipientMemberIds: [], inactivityHours: 24, reminderText: "" });
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const selectedMember = useMemo(() => members.find(member => member.id === selectedMemberID), [members, selectedMemberID]);
@@ -72,9 +72,10 @@ export function CoreJobSettings({ apiBase, language, members, notify, refresh })
 
   useEffect(() => {
     const rule = rules[selectedMemberID];
-    setDraft(rule ? { enabled: rule.enabled, includeTarget: Boolean(rule.includeTarget), inactivityHours: rule.inactivityHours, reminderText: rule.reminderText || "" }
-      : { enabled: false, includeTarget: false, inactivityHours: 24, reminderText: "" });
-  }, [selectedMemberID, rules]);
+    const legacyRecipients = members.filter(member => rule?.includeTarget || member.id !== selectedMemberID).map(member => member.id);
+    setDraft(rule ? { enabled: rule.enabled, recipientMemberIds: rule.recipientMemberIds?.length ? rule.recipientMemberIds : legacyRecipients, inactivityHours: rule.inactivityHours, reminderText: rule.reminderText || "" }
+      : { enabled: false, recipientMemberIds: members.filter(member => member.id !== selectedMemberID).map(member => member.id), inactivityHours: 24, reminderText: "" });
+  }, [selectedMemberID, rules, members]);
 
   async function connect() {
     if (!adminToken.trim()) return;
@@ -99,7 +100,7 @@ export function CoreJobSettings({ apiBase, language, members, notify, refresh })
     try {
       const saved = await adminRequest(apiBase, adminToken.trim(), `/api/v1/admin/core-job-rules/${encodeURIComponent(selectedMember.id)}`, {
         method: "PUT",
-        body: JSON.stringify({ familyId: FAMILY_ID, ...draft, inactivityHours: Number(draft.inactivityHours) }),
+        body: JSON.stringify({ familyId: FAMILY_ID, ...draft, includeTarget: draft.recipientMemberIds.includes(selectedMember.id), inactivityHours: Number(draft.inactivityHours) }),
       });
       setRules(current => ({ ...current, [selectedMember.id]: saved }));
       const run = await adminRequest(apiBase, adminToken.trim(), "/api/v1/admin/core-jobs/run", { method: "POST", body: "{}" });
@@ -164,16 +165,16 @@ export function CoreJobSettings({ apiBase, language, members, notify, refresh })
       <form className="core-job-form" onSubmit={save}>
         <label>{text(language, "Member to watch", "检测对象")}<select value={selectedMemberID} onChange={event => setSelectedMemberID(event.target.value)}>{members.map(member => <option key={member.id} value={member.id}>{member.name}{member.role === "elder" ? text(language, " · Elder", " · 老人") : ""}</option>)}</select></label>
         <label className="core-job-toggle"><input type="checkbox" checked={draft.enabled} onChange={event => setDraft({ ...draft, enabled: event.target.checked })} /><span><strong>{text(language, "Enable no-post detection", "开启未发帖检测")}</strong><small>{text(language, "Private posts count as activity, but their content stays private.", "私密记录也计为活跃，但其内容不会被分享。")}</small></span></label>
-        <label className="core-job-toggle"><input type="checkbox" checked={draft.includeTarget} onChange={event => setDraft({ ...draft, includeTarget: event.target.checked })} /><span><strong>{text(language, "Also remind the detected member", "同时提醒被检测者本人")}</strong><small>{text(language, "They will receive the same custom message, or a self-friendly default reminder.", "本人会收到相同的自定义文案；未自定义时使用适合本人阅读的提醒。")}</small></span></label>
+        <MemberCheckboxes language={language} members={members} selected={draft.recipientMemberIds} onChange={recipientMemberIds => setDraft({ ...draft, recipientMemberIds })} label={text(language, "Who should receive the reminder?", "提醒哪些成员？")} />
         <label>{text(language, "Remind after", "多久未发布后提醒")}<span className="hours-input"><input type="number" min="1" max="720" value={draft.inactivityHours} onChange={event => setDraft({ ...draft, inactivityHours: event.target.value })} /><small>{text(language, "hours", "小时")}</small></span></label>
         <label>{text(language, "Reminder message (optional)", "提醒内容（可选）")}<textarea rows="3" maxLength="300" value={draft.reminderText} onChange={event => setDraft({ ...draft, reminderText: event.target.value })} placeholder={selectedMember ? text(language, `Please check in with ${selectedMember.name}.`, `方便时请联系一下${selectedMember.name}。`) : ""} /></label>
-        <button className="primary-button" disabled={busy || !adminToken.trim() || !selectedMemberID}>{busy ? text(language, "Saving and checking…", "正在保存并检测…") : text(language, "Save and run detection", "保存并立即检测")}</button>
+        <button className="primary-button" disabled={busy || !adminToken.trim() || !selectedMemberID || !draft.recipientMemberIds.length}>{busy ? text(language, "Saving and checking…", "正在保存并检测…") : text(language, "Save and run detection", "保存并立即检测")}</button>
       </form>
       <div className="automation-divider" />
       <BirthdayJobForm language={language} members={members} disabled={busy || !adminToken.trim()} onCreate={createScheduledJob} />
       <div className="automation-divider" />
-      <ActivityJobForm language={language} disabled={busy || !adminToken.trim()} onCreate={createScheduledJob} />
-      <ScheduledJobList language={language} jobs={scheduledJobs} onDelete={removeScheduledJob} onToggle={toggleScheduledJob} />
+      <ActivityJobForm language={language} members={members} disabled={busy || !adminToken.trim()} onCreate={createScheduledJob} />
+      <ScheduledJobList language={language} members={members} jobs={scheduledJobs} onDelete={removeScheduledJob} onToggle={toggleScheduledJob} />
     </div>
   </section>;
 }
@@ -183,9 +184,10 @@ function BirthdayJobForm({ language, members, disabled, onCreate }) {
   const [month, setMonth] = useState(1);
   const [day, setDay] = useState(1);
   const [remindDaysBefore, setRemindDaysBefore] = useState(3);
-  const [includeTarget, setIncludeTarget] = useState(false);
+  const [recipientMemberIds, setRecipientMemberIds] = useState([]);
   const [message, setMessage] = useState("");
   useEffect(() => { if (!memberID && members[0]) setMemberID(members[0].id); }, [memberID, members]);
+  useEffect(() => { setRecipientMemberIds(current => current.length ? current : members.filter(item => item.id !== memberID).map(item => item.id)); }, [members, memberID]);
   const member = members.find(item => item.id === memberID);
 
   function submit(event) {
@@ -195,7 +197,7 @@ function BirthdayJobForm({ language, members, disabled, onCreate }) {
       type: "birthday", title: text(language, `${member.name}'s birthday`, `${member.name}生日提醒`), targetMemberId: member.id,
       birthdayMonthDay: `${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
       remindDaysBefore: Number(remindDaysBefore), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-      includeTarget, message: message.trim(),
+      includeTarget: recipientMemberIds.includes(member.id), memberIds: recipientMemberIds, message: message.trim(),
     });
   }
 
@@ -205,43 +207,51 @@ function BirthdayJobForm({ language, members, disabled, onCreate }) {
       <label>{text(language, "Family member", "家庭成员")}<select value={memberID} onChange={event => setMemberID(event.target.value)}>{members.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       <div className="birthday-date-fields"><label>{text(language, "Month", "月份")}<select value={month} onChange={event => setMonth(Number(event.target.value))}>{months.map(value => <option key={value} value={value}>{value}</option>)}</select></label><label>{text(language, "Day", "日期")}<select value={day} onChange={event => setDay(Number(event.target.value))}>{days.map(value => <option key={value} value={value}>{value}</option>)}</select></label></div>
       <label>{text(language, "Remind in advance", "提前提醒")}<select value={remindDaysBefore} onChange={event => setRemindDaysBefore(Number(event.target.value))}>{[0,1,3,7,14].map(value => <option key={value} value={value}>{value === 0 ? text(language, "On the birthday", "生日当天") : text(language, `${value} day(s) before`, `提前 ${value} 天`)}</option>)}</select></label>
-      <label className="core-job-toggle"><input type="checkbox" checked={includeTarget} onChange={event => setIncludeTarget(event.target.checked)} /><span><strong>{text(language, "Also remind the birthday person", "也提醒寿星本人")}</strong><small>{text(language, "They receive a birthday-friendly version when no custom message is set.", "未填写自定义文案时，寿星会收到适合本人阅读的祝福。")}</small></span></label>
+      <MemberCheckboxes language={language} members={members} selected={recipientMemberIds} onChange={setRecipientMemberIds} label={text(language, "Who should receive the birthday reminder?", "提醒哪些成员？")} />
       <label>{text(language, "Custom message (optional)", "自定义文案（可选）")}<textarea rows="2" maxLength="300" value={message} onChange={event => setMessage(event.target.value)} /></label>
-      <button className="primary-button" disabled={disabled || !memberID}>{text(language, "Add birthday reminder", "添加生日提醒")}</button>
+      <button className="primary-button" disabled={disabled || !memberID || !recipientMemberIds.length}>{text(language, "Add birthday reminder", "添加生日提醒")}</button>
     </form>
   </div>;
 }
 
-function ActivityJobForm({ language, disabled, onCreate }) {
+function ActivityJobForm({ language, members, disabled, onCreate }) {
   const [title, setTitle] = useState("");
   const [topic, setTopic] = useState("");
   const [scheduledFor, setScheduledFor] = useState(defaultLocalDateTime);
   const [message, setMessage] = useState("");
+  const [memberIds, setMemberIds] = useState([]);
+  useEffect(() => { setMemberIds(current => current.length ? current : members.map(member => member.id)); }, [members]);
 
   function submit(event) {
     event.preventDefault();
-    onCreate({ type: "family_activity", title: title.trim(), topic: topic.trim(), scheduledFor: new Date(scheduledFor).toISOString(), message: message.trim() });
+    onCreate({ type: "family_activity", title: title.trim(), topic: topic.trim(), scheduledFor: new Date(scheduledFor).toISOString(), memberIds, message: message.trim() });
   }
 
   return <div className="scheduled-job-section">
-    <div className="automation-subheading"><span>3</span><div><strong>{text(language, "Family task or activity", "家庭任务或活动")}</strong><small>{text(language, "Send everyone one suggestion at the chosen time.", "在指定时间向所有家庭成员发送一次互动建议。")}</small></div></div>
+    <div className="automation-subheading"><span>3</span><div><strong>{text(language, "Family task or activity", "家庭任务或活动")}</strong><small>{text(language, "Create a shared Space thread for the selected members at the chosen time.", "在指定时间为勾选的成员创建一个共享 Space thread。")}</small></div></div>
     <form className="core-job-form compact-job-form" onSubmit={submit}>
       <label>{text(language, "Task name", "任务名称")}<input maxLength="80" value={title} onChange={event => setTitle(event.target.value)} placeholder={text(language, "Sunday family time", "周日家庭时光")} required /></label>
       <label>{text(language, "Interaction topic", "互动主题")}<textarea rows="2" maxLength="120" value={topic} onChange={event => setTopic(event.target.value)} placeholder={text(language, "Everyone shares a favorite old photo", "每个人分享一张最喜欢的老照片")} required /></label>
       <label>{text(language, "Send at", "提醒时间")}<input type="datetime-local" value={scheduledFor} onChange={event => setScheduledFor(event.target.value)} required /></label>
+      <MemberCheckboxes language={language} members={members} selected={memberIds} onChange={setMemberIds} label={text(language, "Who can join this activity?", "哪些成员参加？")} />
       <label>{text(language, "Custom message (optional)", "自定义文案（可选）")}<textarea rows="2" maxLength="300" value={message} onChange={event => setMessage(event.target.value)} /></label>
-      <button className="primary-button" disabled={disabled || !title.trim() || !topic.trim() || !scheduledFor}>{text(language, "Schedule family activity", "安排家庭活动")}</button>
+      <button className="primary-button" disabled={disabled || !title.trim() || !topic.trim() || !scheduledFor || !memberIds.length}>{text(language, "Schedule family activity", "安排家庭活动")}</button>
     </form>
   </div>;
 }
 
-function ScheduledJobList({ language, jobs, onDelete, onToggle }) {
+function ScheduledJobList({ language, members, jobs, onDelete, onToggle }) {
   if (!jobs.length) return null;
   return <div className="scheduled-job-list"><h3>{text(language, "Configured reminders", "已配置的提醒")}</h3>{jobs.map(job => <article key={job.id}>
     <span className={`job-kind ${job.type}`}>{job.type === "birthday" ? text(language, "Birthday", "生日") : text(language, "Activity", "活动")}</span>
-    <div><strong>{job.title}</strong><small>{job.type === "birthday" ? `${job.birthdayMonthDay} · ${text(language, `${job.remindDaysBefore} day(s) before`, `提前 ${job.remindDaysBefore} 天`)}` : `${formatScheduledTime(job.scheduledFor, language)} · ${job.topic}`}{job.completedAt ? text(language, " · Completed", " · 已完成") : !job.enabled ? text(language, " · Paused", " · 已暂停") : ""}</small></div>
+    <div><strong>{job.title}</strong><small>{job.type === "birthday" ? `${job.birthdayMonthDay} · ${text(language, `${job.remindDaysBefore} day(s) before`, `提前 ${job.remindDaysBefore} 天`)}` : `${formatScheduledTime(job.scheduledFor, language)} · ${job.topic}`}{job.completedAt ? text(language, " · Completed", " · 已完成") : !job.enabled ? text(language, " · Paused", " · 已暂停") : ""}</small><small>{text(language, "Members", "成员")}：{(job.memberIds || []).map(id => members.find(member => member.id === id)?.name).filter(Boolean).join(language === "zh" ? "、" : ", ") || text(language, "Legacy family selection", "旧版家庭范围")}</small></div>
     <span className="job-actions">{!job.completedAt && <button type="button" onClick={() => onToggle(job)}>{job.enabled ? text(language, "Pause", "暂停") : text(language, "Enable", "开启")}</button>}<button type="button" onClick={() => onDelete(job)}>{text(language, "Delete", "删除")}</button></span>
   </article>)}</div>;
+}
+
+function MemberCheckboxes({ language, members, selected, onChange, label }) {
+  function toggle(memberID) { onChange(selected.includes(memberID) ? selected.filter(id => id !== memberID) : [...selected, memberID]); }
+  return <fieldset className="member-checkboxes"><legend>{label}</legend><div>{members.map(member => <label key={member.id}><input type="checkbox" checked={selected.includes(member.id)} onChange={() => toggle(member.id)} /><span style={{ "--member-color": member.color }}>{member.name}</span></label>)}</div><small>{text(language, `${selected.length} selected`, `已选择 ${selected.length} 人`)}</small></fieldset>;
 }
 
 function defaultLocalDateTime() {

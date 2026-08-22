@@ -12,6 +12,15 @@
 .core-job-toggle input { margin-top: 3px; accent-color: var(--rust); }.core-job-toggle span { display: grid; gap: 3px; }.core-job-toggle strong { color: var(--ink); font-size: 13px; }.core-job-toggle small { font-weight: 400; line-height: 1.5; }
 .hours-input { display: flex; align-items: center; gap: 9px; }.hours-input input { max-width: 150px; }.hours-input small { white-space: nowrap; }
 .core-job-form textarea { resize: vertical; line-height: 1.55; }.core-job-form .primary-button { justify-self: end; }
+.member-checkboxes { border: 1px solid var(--line); border-radius: 16px; padding: 14px; margin: 0; }
+.member-checkboxes legend { padding: 0 6px; font-size: 11px; font-weight: 700; color: var(--muted); }
+.member-checkboxes > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.member-checkboxes label { cursor: pointer; }
+.member-checkboxes label span { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 700; }
+.member-checkboxes label span::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--member-color, var(--rust)); }
+.member-checkboxes input { position: absolute; opacity: 0; pointer-events: none; }
+.member-checkboxes input:checked + span { border-color: var(--rust); background: #fff2e8; }
+.member-checkboxes > small { display: block; margin-top: 8px; color: var(--muted); }
 .automation-subheading { display: flex; align-items: center; gap: 11px; }.automation-subheading > span { width: 29px; height: 29px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 9px; color: white; background: var(--rust); font-size: 12px; font-weight: 800; }.automation-subheading div { display: grid; gap: 2px; }.automation-subheading strong { font-size: 14px; }.automation-subheading small { color: var(--muted); font-size: 11px; }
 .automation-divider { height: 1px; background: var(--line); }.scheduled-job-section { display: grid; gap: 17px; }.compact-job-form { padding-left: 40px; }.birthday-date-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .scheduled-job-list { display: grid; gap: 9px; padding-top: 4px; }.scheduled-job-list h3 { margin: 0 0 3px; font-size: 14px; }.scheduled-job-list article { display: flex; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: #fffdf9; }.scheduled-job-list article > div { min-width: 0; flex: 1; display: grid; gap: 3px; }.scheduled-job-list article strong { font-size: 12px; }.scheduled-job-list article small { overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }.scheduled-job-list article button { border: 0; color: var(--rust); background: transparent; font-size: 11px; font-weight: 700; }.job-actions { display: flex; align-items: center; gap: 2px; }.job-kind { padding: 5px 8px; border-radius: 7px; color: #7a4634; background: #f5e3d8; font-size: 10px; font-weight: 800; }.job-kind.family_activity { color: #3d625c; background: #e1edeb; }

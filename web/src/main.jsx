@@ -4,6 +4,7 @@ import "./styles.css";
 import LandingPage from "./LandingPage";
 import { CoreJobSettings, NotificationInbox } from "./coreJobs";
 import MemberRoleEditor from "./MemberRoleEditor";
+import ActivityThreads from "./ActivityThreads";
 
 const FAMILY_ID = "our-family";
 const ROUTES = ["/", "/feed", "/space", "/elder", "/settings"];
@@ -357,6 +358,7 @@ function MemberSpace({ api, members, currentMember, notify, refreshKey }) {
   }
   return <div className="space-page">
     <section className="space-hero" style={{ "--member-color": currentMember.color }}><Avatar member={currentMember} large /><div><p className="eyebrow">MEMBER SPACE</p><h2>{tx(`${currentMember.name}'s Space`, `${currentMember.name}的空间`)}</h2><p>{tx("Every entry belongs to you first. You decide whether to share it with the family.", "每一条记录都先属于你，由你决定是否分享给家庭。")}</p></div><div className="space-stats"><strong>{updates.length}</strong><span>{tx("entries", "条记录")}</span><strong>{updates.filter(item => item.visibility === "family").length}</strong><span>{tx("shared", "已分享")}</span></div></section>
+    <ActivityThreads api={api} members={members} currentMember={currentMember} notify={notify} language={language} refreshKey={refreshKey} />
     <section className="nas-library-section">
       <div className="nas-library-heading"><SectionHeading eyebrow="PRIVATE NAS" title={tx(`${currentMember.name}'s file space`, `${currentMember.name}的文件空间`)} count={mediaImports.length} />{selectable.length > 0 && <div className="nas-bulk-actions"><button type="button" className="text-button" disabled={!visibleSelectable.length} onClick={selectAll}>{visibleSelectable.length > 0 && visibleSelectable.every(item => selected.includes(item.id)) ? tx("Clear visible selection", "取消当前选择") : tx("Select visible files", "选择当前文件")}</button><button type="button" className="primary-button" disabled={!selected.length || sharing} onClick={shareSelected}>{sharing ? tx("Sharing…", "正在分享…") : tx(`Share selected (${selected.length})`, `分享所选（${selected.length}）`)}</button></div>}</div>
       <p className="nas-section-copy">{tx("A clear virtual folder view of this member's private NAS media. Real disk paths stay hidden.", "按文件夹清晰整理当前成员的私人 NAS 媒体；真实磁盘路径不会暴露。")}</p>
