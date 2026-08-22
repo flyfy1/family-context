@@ -222,9 +222,10 @@ function UpdateCard({ update, member, api, notify }) {
   const { language, tx } = useLanguage();
   const [showTranscript, setShowTranscript] = useState(false);
   return <article className="update-card card">
-    <div className="update-meta"><Avatar member={member} /><div><strong>{member?.name || tx("Family member", "家庭成员")}</strong><span>{formatTime(update.createdAt, language)} · {update.visibility === "private" ? tx("Only me", "仅自己") : tx("Family", "家庭可见")}</span></div><span className="update-type">{update.type === "voice" ? tx("Voice", "语音") : update.type === "image" ? tx("Photo", "照片") : tx("Text", "文字")}</span></div>
+    <div className="update-meta"><Avatar member={member} /><div><strong>{member?.name || tx("Family member", "家庭成员")}</strong><span>{formatTime(update.createdAt, language)} · {update.visibility === "private" ? tx("Only me", "仅自己") : tx("Family", "家庭可见")}</span></div><span className="update-type">{update.type === "voice" ? tx("Voice", "语音") : update.type === "image" ? tx("Photo", "照片") : update.type === "video" ? tx("Video", "视频") : tx("Text", "文字")}</span></div>
     <p className="update-text">{update.text}</p>
     {update.type === "image" && update.mediaUrl && <ImageAttachment path={update.mediaUrl} api={api} notify={notify} />}
+    {update.type === "video" && update.mediaUrl && <VideoAttachment path={update.mediaUrl} api={api} notify={notify} />}
     {update.type === "voice" && <div className="voice-actions"><AudioButton path={update.audioUrl} api={api} notify={notify} />{update.transcript && <button className="text-button" onClick={() => setShowTranscript(value => !value)}>{showTranscript ? tx("Hide transcript", "收起转写") : tx("View transcript", "查看转写")}</button>}</div>}
     {showTranscript && <div className="transcript"><small>{tx("VOICE TRANSCRIPT", "语音转写")}</small>{update.transcript}</div>}
     <div className="update-footer"><span>♡</span><span>{tx("From", "来自")} {update.source === "member_voice" ? tx("voice journal", "语音记录") : tx("member sharing", "成员分享")}</span></div>
@@ -247,26 +248,123 @@ function ImageAttachment({ path, api, notify }) {
   return url ? <img className="update-image" src={url} alt={tx("Photo shared by a family member", "家庭成员分享的照片")} /> : <div className="image-loading">{tx("Opening photo…", "正在打开照片…")}</div>;
 }
 
-function MemberSpace({ api, members, currentMember, notify, refreshKey }) {
+function VideoAttachment({ path, api, notify }) {
   const { tx } = useLanguage();
+  const [url, setURL] = useState("");
+  useEffect(() => {
+    let active = true;
+    let objectURL = "";
+    api(path, { raw: true }).then(blob => {
+      if (!active) return;
+      objectURL = URL.createObjectURL(blob);
+      setURL(objectURL);
+    }).catch(error => notify(error.message));
+    return () => { active = false; if (objectURL) URL.revokeObjectURL(objectURL); };
+  }, [api, path]);
+  return url ? <video className="update-video" src={url} controls preload="metadata">{tx("Your browser cannot play this video.", "当前浏览器无法播放这段视频。")}</video> : <div className="image-loading">{tx("Opening video…", "正在打开视频…")}</div>;
+}
+
+function MemberSpace({ api, members, currentMember, notify, refreshKey }) {
+  const { language, tx } = useLanguage();
   const [updates, setUpdates] = useState([]);
+  const [familyUpdates, setFamilyUpdates] = useState([]);
   const [mediaImports, setMediaImports] = useState([]);
   const [filter, setFilter] = useState("all");
-  useEffect(() => {
+  const [selected, setSelected] = useState([]);
+  const [captions, setCaptions] = useState({});
+  const [sharing, setSharing] = useState(false);
+  const [activeFolder, setActiveFolder] = useState("all");
+  const [focusedId, setFocusedId] = useState("");
+  const reload = () => {
     if (!currentMember) return;
-    Promise.all([
+    return Promise.all([
       api(`/api/v1/updates?scope=mine&memberId=${encodeURIComponent(currentMember.id)}`).then(data => setUpdates(data.updates || [])),
+      api("/api/v1/updates?scope=family").then(data => setFamilyUpdates((data.updates || []).filter(item => item.type === "image" || item.type === "video"))),
       api("/api/v1/me/media-imports", { headers: { "X-Member-ID": currentMember.id } }).then(data => setMediaImports(data.mediaImports || [])),
-    ]).catch(error => notify(error.message));
+    ]);
+  };
+  useEffect(() => {
+    setSelected([]);
+    setActiveFolder("all");
+    setFocusedId("");
+    reload().catch(error => notify(error.message));
   }, [api, currentMember?.id, refreshKey]);
   if (!currentMember) return null;
   const shown = updates.filter(update => filter === "all" || update.visibility === filter);
+  const selectable = mediaImports.filter(item => !item.updateId);
+  const visibleMedia = mediaImports.filter(item => {
+    if (activeFolder === "all") return true;
+    const [mediaType, month] = activeFolder.split(":");
+    if (item.mediaType !== mediaType) return false;
+    return !month || mediaMonthKey(item) === month;
+  });
+  const visibleSelectable = visibleMedia.filter(item => !item.updateId);
+  function toggleSelection(id) {
+    setSelected(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
+  }
+  function selectAll() {
+    const allVisibleSelected = visibleSelectable.length > 0 && visibleSelectable.every(item => selected.includes(item.id));
+    setSelected(current => allVisibleSelected ? current.filter(id => !visibleSelectable.some(item => item.id === id)) : [...new Set([...current, ...visibleSelectable.map(item => item.id)])]);
+  }
+  async function shareSelected() {
+    if (!selected.length) return;
+    setSharing(true);
+    let shared = 0;
+    try {
+      for (const id of selected) {
+        const item = mediaImports.find(candidate => candidate.id === id);
+        await api(`/api/v1/me/media-imports/${encodeURIComponent(id)}/decision`, {
+          method: "POST",
+          headers: { "X-Member-ID": currentMember.id },
+          body: JSON.stringify({ visibility: "family", caption: captions[id] ?? item?.analysis?.suggestedCaption ?? "" }),
+        });
+        shared += 1;
+      }
+      setSelected([]);
+      await reload();
+      notify(tx(`${shared} item(s) shared to the family Space`, `已将 ${shared} 个文件分享到家庭公共 Space`));
+    } catch (error) {
+      await reload().catch(() => {});
+      notify(shared ? tx(`${shared} shared; remaining items need another try`, `已分享 ${shared} 个，其余文件请重试`) : error.message);
+    } finally { setSharing(false); }
+  }
   return <div className="space-page">
     <section className="space-hero" style={{ "--member-color": currentMember.color }}><Avatar member={currentMember} large /><div><p className="eyebrow">MEMBER SPACE</p><h2>{tx(`${currentMember.name}'s Space`, `${currentMember.name}的空间`)}</h2><p>{tx("Every entry belongs to you first. You decide whether to share it with the family.", "每一条记录都先属于你，由你决定是否分享给家庭。")}</p></div><div className="space-stats"><strong>{updates.length}</strong><span>{tx("entries", "条记录")}</span><strong>{updates.filter(item => item.visibility === "family").length}</strong><span>{tx("shared", "已分享")}</span></div></section>
-    {mediaImports.length > 0 && <section className="media-audit-section"><SectionHeading eyebrow="AI SHARE HISTORY" title={tx("Synced media and sharing decisions", "同步媒体与分享判断")} count={mediaImports.length} /><div className="media-audit-list">{mediaImports.map(item => <MediaImportAuditCard key={item.id} item={item} member={currentMember} api={api} notify={notify} />)}</div></section>}
+    <section className="nas-library-section">
+      <div className="nas-library-heading"><SectionHeading eyebrow="PRIVATE NAS" title={tx(`${currentMember.name}'s file space`, `${currentMember.name}的文件空间`)} count={mediaImports.length} />{selectable.length > 0 && <div className="nas-bulk-actions"><button type="button" className="text-button" disabled={!visibleSelectable.length} onClick={selectAll}>{visibleSelectable.length > 0 && visibleSelectable.every(item => selected.includes(item.id)) ? tx("Clear visible selection", "取消当前选择") : tx("Select visible files", "选择当前文件")}</button><button type="button" className="primary-button" disabled={!selected.length || sharing} onClick={shareSelected}>{sharing ? tx("Sharing…", "正在分享…") : tx(`Share selected (${selected.length})`, `分享所选（${selected.length}）`)}</button></div>}</div>
+      <p className="nas-section-copy">{tx("A clear virtual folder view of this member's private NAS media. Real disk paths stay hidden.", "按文件夹清晰整理当前成员的私人 NAS 媒体；真实磁盘路径不会暴露。")}</p>
+      {mediaImports.length
+        ? <NasFileSystem items={mediaImports} visibleItems={visibleMedia} activeFolder={activeFolder} onFolderChange={setActiveFolder} focusedId={focusedId} onFocus={setFocusedId} selected={selected} onToggle={toggleSelection} captions={captions} onCaptionChange={(id, value) => setCaptions(current => ({ ...current, [id]: value }))} member={currentMember} api={api} notify={notify} language={language} />
+        : <EmptyState icon="▧" title={tx("No synced media yet", "还没有同步媒体")} text={tx("Photos and videos backed up by the mobile app will appear in this private file space.", "手机 APP 备份的照片和视频会出现在这个私人文件空间。")}/>}
+    </section>
+    <section className="family-media-section"><SectionHeading eyebrow="FAMILY SPACE" title={tx("Shared with everyone", "家庭公共 Space")} count={familyUpdates.length} /><p className="nas-section-copy">{tx("Everyone in the family can see these shared photos and videos.", "这里的照片和视频对所有家庭成员可见。")}</p>{familyUpdates.length ? <div className="family-media-grid">{familyUpdates.map(update => <UpdateCard key={update.id} update={update} member={members.find(item => item.id === update.memberId)} api={api} notify={notify} />)}</div> : <EmptyState icon="✦" title={tx("The family Space is empty", "家庭公共 Space 还是空的")} text={tx("Select media from your private library above to share the first item.", "从上方私人媒体库选择文件，分享第一条内容。")}/>}</section>
     <div className="space-toolbar"><SectionHeading eyebrow="LOCAL FILE SPACE" title={tx("My entries", "我的记录")} /><div className="filter-pills">{[["all",tx("All", "全部")],["private",tx("Only me", "仅自己")],["family",tx("Shared", "已分享")]].map(([value,label]) => <button key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{label}</button>)}</div></div>
     {shown.length ? <div className="update-list narrow">{shown.map(update => <UpdateCard key={update.id} update={update} member={members.find(item => item.id === update.memberId)} api={api} notify={notify} />)}</div> : <EmptyState icon="◫" title={tx("No entries here yet", "这里还没有记录")} text={tx("Your private and family updates appear here and are saved to your personal file space.", "你发布的私人和家庭 Update 会出现在这里，并同步保存到个人文件空间。")} />}
   </div>;
+}
+
+function mediaMonthKey(item) {
+  const date = new Date(item.capturedAt || item.createdAt);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function NasFileSystem({ items, visibleItems, activeFolder, onFolderChange, focusedId, onFocus, selected, onToggle, captions, onCaptionChange, member, api, notify, language }) {
+  const { tx } = useLanguage();
+  const focused = visibleItems.find(item => item.id === focusedId) || visibleItems[0] || null;
+  const groups = ["image", "video"].map(mediaType => ({ mediaType, items: items.filter(item => item.mediaType === mediaType) })).filter(group => group.items.length);
+  const folderLabel = activeFolder === "all" ? tx("All files", "全部文件") : activeFolder.startsWith("image") ? tx("Photos", "照片") : tx("Videos", "视频");
+  return <div className="nas-explorer card">
+    <aside className="nas-folder-tree"><div className="nas-tree-title">▣ <strong>{tx("My NAS", "我的 NAS")}</strong></div><button className={activeFolder === "all" ? "active" : ""} onClick={() => onFolderChange("all")}><span>▤ {tx("All files", "全部文件")}</span><small>{items.length}</small></button>{groups.map(group => { const months = [...new Set(group.items.map(mediaMonthKey))].sort().reverse(); return <div className="nas-tree-group" key={group.mediaType}><button className={activeFolder === group.mediaType ? "active" : ""} onClick={() => onFolderChange(group.mediaType)}><span>▰ {group.mediaType === "image" ? tx("Photos", "照片") : tx("Videos", "视频")}</span><small>{group.items.length}</small></button>{months.map(month => <button key={`${group.mediaType}:${month}`} className={`nested ${activeFolder === `${group.mediaType}:${month}` ? "active" : ""}`} onClick={() => onFolderChange(`${group.mediaType}:${month}`)}><span>└ {formatMediaMonth(month, language)}</span><small>{group.items.filter(item => mediaMonthKey(item) === month).length}</small></button>)}</div>; })}</aside>
+    <section className="nas-file-pane"><div className="nas-breadcrumb"><span>{tx("My NAS", "我的 NAS")}</span><b>›</b><strong>{folderLabel}</strong>{activeFolder.includes(":") && <><b>›</b><strong>{formatMediaMonth(activeFolder.split(":")[1], language)}</strong></>}</div><div className="nas-file-header"><span></span><span>{tx("Name", "名称")}</span><span>{tx("Captured", "拍摄时间")}</span><span>{tx("Status", "状态")}</span></div><div className="nas-file-list">{visibleItems.map(item => { const shared = Boolean(item.updateId); return <div className={`nas-file-row ${focused?.id === item.id ? "focused" : ""}`} key={item.id}><input aria-label={tx(`Select ${item.originalName}`, `选择 ${item.originalName}`)} type="checkbox" disabled={shared} checked={selected.includes(item.id)} onChange={() => onToggle(item.id)} /><button className="nas-file-name" onClick={() => onFocus(item.id)}><span>{item.mediaType === "video" ? "▸" : "▧"}</span><strong>{item.originalName}</strong></button><time>{formatFileTime(item.capturedAt || item.createdAt, language)}</time><span className={`nas-file-status ${shared ? "shared" : ""}`}>{shared ? tx("Shared", "已分享") : tx("Private", "仅自己")}</span></div>; })}</div></section>
+    <aside className="nas-inspector">{focused ? <FileInspector item={focused} member={member} api={api} notify={notify} caption={captions[focused.id]} onCaptionChange={value => onCaptionChange(focused.id, value)} /> : <div className="nas-no-preview"><span>▧</span><p>{tx("This folder is empty", "这个文件夹是空的")}</p></div>}</aside>
+  </div>;
+}
+
+function FileInspector({ item, member, api, notify, caption, onCaptionChange }) {
+  const { language, tx } = useLanguage();
+  const shared = Boolean(item.updateId);
+  const recipients = item.analysis?.suggestedRecipients || [];
+  return <div className="nas-inspector-content"><div className="nas-inspector-preview">{item.mediaType === "video" ? <VideoAttachment path={item.mediaUrl} api={api} notify={notify} /> : <ImageAttachment path={item.mediaUrl} api={api} notify={notify} />}</div><strong className="nas-inspector-name">{item.originalName}</strong><dl className="nas-file-facts"><div><dt>{tx("Type", "类型")}</dt><dd>{item.mediaType === "video" ? tx("Video", "视频") : tx("Photo", "照片")}</dd></div><div><dt>{tx("Owner", "所有者")}</dt><dd>{member.name}</dd></div><div><dt>{tx("Date", "日期")}</dt><dd>{formatFileTime(item.capturedAt || item.createdAt, language)}</dd></div></dl><label className="nas-caption"><span>{tx("Description when shared", "分享时的描述")}</span><textarea disabled={shared} maxLength="2000" value={caption ?? item.analysis?.suggestedCaption ?? ""} onChange={event => onCaptionChange(event.target.value)} placeholder={tx("Add a description for the family…", "给家人写一段描述……")} /></label>{item.analysis && <details className="nas-audit"><summary>{tx("AI sharing suggestion", "查看 AI 分享建议")}</summary>{item.analysis.summary && <p>{item.analysis.summary}</p>}<dl><div><dt>{tx("Suggested", "建议对象")}</dt><dd>{recipients.length ? recipients.map(recipient => recipient.name).join("、") : tx("Only me", "仅自己")}</dd></div><div><dt>{tx("Actual", "实际对象")}</dt><dd>{shared ? tx("Family", "全体家庭") : tx("Only me", "仅自己")}</dd></div></dl></details>}</div>;
 }
 
 function MediaImportAuditCard({ item, member, api, notify }) {
@@ -572,6 +670,8 @@ function createAPI(config) {
 }
 
 function formatTime(value, language) { return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en-US", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value)); }
+function formatFileTime(value, language) { return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en-US", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(value)); }
+function formatMediaMonth(value, language) { const [year, month] = value.split("-").map(Number); return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en-US", { year: "numeric", month: "long" }).format(new Date(year, month - 1, 1)); }
 function formatFullDate(value, language) { return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en-US", { month: "long", day: "numeric", weekday: "long" }).format(value); }
 function formatDuration(value) { return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`; }
 function localDate() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; }

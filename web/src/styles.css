@@ -110,7 +110,8 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
 .update-meta > div { flex: 1; }
 .update-type { padding: 5px 9px; border-radius: 99px; color: var(--sage) !important; background: rgba(97,114,105,.1); font-size: 10px !important; font-weight: 800; }
 .update-text { margin: 17px 0; font-family: Georgia, "Noto Serif SC", serif; font-size: 19px; line-height: 1.75; white-space: pre-wrap; }
-.update-image { width: 100%; max-height: 560px; display: block; margin: 0 0 17px; border-radius: 14px; object-fit: cover; background: var(--paper-2); }
+.update-image, .update-video { width: 100%; max-height: 560px; display: block; margin: 0 0 17px; border-radius: 14px; object-fit: cover; background: var(--paper-2); }
+.update-video { aspect-ratio: 16 / 10; object-fit: contain; background: #221f1d; }
 .image-loading { min-height: 160px; display: grid; place-items: center; margin: 0 0 17px; border-radius: 14px; color: var(--muted); background: var(--paper-2); font-size: 11px; }
 .update-footer { display: flex; justify-content: space-between; padding-top: 13px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; }
 .voice-actions { display: flex; align-items: center; gap: 8px; margin: 12px 0 16px; }
@@ -139,6 +140,54 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
 .empty-state p { max-width: 400px; margin: 8px 0 0; font-size: 12px; line-height: 1.6; }
 
 .space-page, .elder-page, .settings-page { padding-top: 40px; }
+.nas-library-section, .family-media-section { margin: 34px 0 44px; }
+.nas-library-heading { display: flex; align-items: end; justify-content: space-between; gap: 20px; }
+.nas-library-heading .section-heading { min-width: 0; flex: 1; margin-bottom: 0; }
+.nas-bulk-actions { display: flex; align-items: center; gap: 8px; padding-bottom: 2px; }
+.nas-section-copy { max-width: 720px; margin: 10px 2px 18px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.nas-explorer { min-height: 520px; display: grid; grid-template-columns: 190px minmax(340px, 1fr) 290px; overflow: hidden; border-radius: 16px; box-shadow: 0 12px 30px rgba(72,52,41,.06); }
+.nas-folder-tree { padding: 15px 10px; border-right: 1px solid var(--line); background: #f7f2eb; }
+.nas-tree-title { display: flex; align-items: center; gap: 8px; padding: 6px 10px 14px; font-size: 12px; }
+.nas-folder-tree button { width: 100%; min-height: 37px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 9px; border: 0; border-radius: 7px; color: var(--muted); background: transparent; font-size: 11px; text-align: left; }
+.nas-folder-tree button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nas-folder-tree button small { padding: 2px 6px; border-radius: 99px; background: rgba(62,48,40,.06); font-size: 8px; }
+.nas-folder-tree button.active { color: var(--rust-dark); background: #eadfd4; font-weight: 800; }
+.nas-tree-group { margin-top: 3px; }.nas-folder-tree button.nested { min-height: 31px; padding-left: 23px; font-size: 9px; }
+.nas-file-pane { min-width: 0; background: var(--card); }
+.nas-breadcrumb { min-height: 52px; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 10px; }
+.nas-breadcrumb strong { color: var(--ink); }.nas-breadcrumb b { color: #b7ada5; }
+.nas-file-header, .nas-file-row { display: grid; grid-template-columns: 28px minmax(130px, 1fr) 105px 70px; align-items: center; gap: 7px; padding: 0 14px; }
+.nas-file-header { min-height: 34px; border-bottom: 1px solid var(--line); color: var(--muted); background: #fbf8f3; font-size: 8px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.nas-file-row { min-height: 48px; border-bottom: 1px solid rgba(62,48,40,.07); font-size: 10px; }
+.nas-file-row:hover, .nas-file-row.focused { background: #faf3ec; }
+.nas-file-row input { width: 15px; height: 15px; margin: 0; accent-color: var(--rust); }
+.nas-file-name { min-width: 0; display: flex; align-items: center; gap: 8px; padding: 0; border: 0; color: var(--ink); background: transparent; text-align: left; }
+.nas-file-name > span { width: 25px; height: 25px; display: grid; place-items: center; border-radius: 6px; color: var(--sage); background: rgba(97,114,105,.1); font-size: 13px; }
+.nas-file-name strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+.nas-file-row time { color: var(--muted); font-size: 8px; }
+.nas-file-status { width: fit-content; padding: 3px 6px; border-radius: 99px; color: #785d4c; background: rgba(154,125,105,.12); font-size: 8px; font-weight: 800; }
+.nas-file-status.shared { color: #3f6657; background: rgba(97,114,105,.12); }
+.nas-inspector { min-width: 0; border-left: 1px solid var(--line); background: #fcfaf6; }
+.nas-inspector-content { display: grid; gap: 13px; padding: 15px; }
+.nas-inspector-preview { aspect-ratio: 4 / 3; overflow: hidden; border-radius: 10px; background: var(--paper-2); }
+.nas-inspector-preview .update-image, .nas-inspector-preview .update-video { width: 100%; height: 100%; min-height: 0; margin: 0; border-radius: 0; }
+.nas-inspector-preview .update-image { object-fit: cover; }.nas-inspector-preview .image-loading { height: 100%; min-height: 0; margin: 0; border-radius: 0; }
+.nas-inspector-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: Georgia, "Noto Serif SC", serif; font-size: 14px; }
+.nas-file-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin: 0; }
+.nas-file-facts div { min-width: 0; padding: 7px; border-radius: 7px; background: #f5eee7; }.nas-file-facts dt { color: var(--muted); font-size: 7px; font-weight: 800; }.nas-file-facts dd { overflow: hidden; margin: 3px 0 0; text-overflow: ellipsis; white-space: nowrap; font-size: 8px; font-weight: 750; }
+.nas-no-preview { min-height: 100%; display: grid; place-content: center; justify-items: center; color: var(--muted); font-size: 10px; }.nas-no-preview span { font-size: 25px; }
+.nas-caption { display: grid; gap: 6px; color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .04em; }
+.nas-caption textarea { width: 100%; min-height: 72px; padding: 10px; resize: vertical; border: 1px solid var(--line); border-radius: 10px; outline: none; color: var(--ink); background: #faf6f0; font-size: 11px; font-weight: 500; line-height: 1.55; letter-spacing: 0; }
+.nas-caption textarea:focus { border-color: rgba(173,76,52,.5); box-shadow: 0 0 0 3px rgba(173,76,52,.08); }
+.nas-caption textarea:disabled { resize: none; opacity: .72; }
+.nas-audit { padding-top: 2px; border-top: 1px solid var(--line); color: var(--muted); font-size: 9px; }
+.nas-audit summary { padding-top: 9px; color: var(--rust-dark); font-weight: 800; cursor: pointer; }
+.nas-audit p { margin: 8px 0 0; line-height: 1.6; }
+.nas-audit dl { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0 0; }
+.nas-audit dl div { padding: 7px; border-radius: 7px; background: #faf6f0; }
+.nas-audit dt { font-weight: 800; }.nas-audit dd { margin: 3px 0 0; color: var(--ink); }
+.family-media-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; }
+.family-media-grid .update-card { min-width: 0; }
 .space-hero { display: flex; align-items: center; gap: 22px; min-height: 200px; margin-bottom: 44px; padding: 34px; border-radius: 24px; background: linear-gradient(120deg, color-mix(in srgb, var(--member-color) 13%, white), rgba(255,253,249,.74)); box-shadow: var(--shadow); }
 .space-hero h2 { margin: 0 0 8px; font-size: 35px; }
 .space-hero p:not(.eyebrow) { margin: 0; color: var(--muted); }
@@ -271,6 +320,7 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
   .right-rail { grid-template-columns: 1fr 1fr; }.privacy-card { grid-column: 1 / -1; }
   .elder-update-grid { grid-template-columns: 1fr; }
   .settings-section { grid-template-columns: 220px minmax(0, 1fr); gap: 30px; }
+  .nas-explorer { grid-template-columns: 165px minmax(310px, 1fr) 250px; }
 }
 
 @media (max-width: 760px) {
@@ -291,6 +341,10 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
   .right-rail { grid-template-columns: 1fr; }.privacy-card { grid-column: auto; }
   .space-hero { align-items: flex-start; flex-wrap: wrap; padding: 24px; }.space-hero .avatar { width: 58px; height: 58px; }.space-stats { width: 100%; margin: 0; padding: 16px 0 0; border: 0; border-top: 1px solid var(--line); }
   .space-toolbar { align-items: flex-start; flex-direction: column; }.filter-pills { margin-top: 0; }
+  .nas-library-heading { align-items: stretch; flex-direction: column; }.nas-bulk-actions { justify-content: space-between; }.family-media-grid { grid-template-columns: 1fr; }
+  .nas-explorer { grid-template-columns: 1fr; }
+  .nas-folder-tree { display: flex; gap: 5px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }.nas-tree-title { flex: 0 0 auto; padding: 6px 9px; }.nas-folder-tree > button, .nas-tree-group { flex: 0 0 auto; width: auto; }.nas-tree-group { display: flex; }.nas-folder-tree button { width: auto; white-space: nowrap; }.nas-folder-tree button.nested { padding-left: 9px; }
+  .nas-inspector { border-top: 1px solid var(--line); border-left: 0; }.nas-inspector-content { grid-template-columns: minmax(180px, 40%) 1fr; align-items: start; }.nas-inspector-preview { grid-row: span 5; }
   .record-orb { width: 190px; height: 190px; }
   .settings-section { grid-template-columns: 1fr; gap: 22px; padding: 22px; }.tree-nodes { justify-content: flex-start; overflow-x: auto; padding-bottom: 5px; }.tree-nodes::before { left: 56px; right: 56px; }.tree-node { min-width: 108px; }.add-member { grid-template-columns: 1fr; }.add-member .primary-button, .settings-form .primary-button { width: 100%; }
   .share-policy-form fieldset { grid-template-columns: 1fr; }.share-policy-form fieldset span { min-height: 64px; }.policy-actions { align-items: stretch; flex-direction: column-reverse; }.policy-actions button { width: 100%; }
@@ -303,6 +357,9 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
   .visibility { width: 100%; }.visibility button { flex: 1; }
   .voice-actions { align-items: stretch; flex-direction: column; }.audio-button { width: 100%; justify-content: center; }
   .elder-hero { padding-inline: 0; }.elder-hero h2 { font-size: 35px; }.elder-summary { padding: 21px; }.summary-content { font-size: 17px; }
+  .nas-bulk-actions { align-items: stretch; flex-direction: column; }.nas-bulk-actions .primary-button { width: 100%; }
+  .nas-file-header, .nas-file-row { grid-template-columns: 24px minmax(110px, 1fr) 62px; }.nas-file-header span:nth-child(3), .nas-file-row time { display: none; }
+  .nas-inspector-content { grid-template-columns: 1fr; }.nas-inspector-preview { grid-row: auto; }
 }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
