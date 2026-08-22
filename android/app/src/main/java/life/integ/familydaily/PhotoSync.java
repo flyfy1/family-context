@@ -13,6 +13,7 @@ import androidx.work.OneTimeWorkRequest;
 import androidx.work.PeriodicWorkRequest;
 import androidx.work.WorkManager;
 
+import java.net.URL;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -45,9 +46,36 @@ final class PhotoSync {
     }
 
     static boolean isConfigured(Context context) {
-        SharedPreferences prefs = preferences(context);
-        return !prefs.getString(KEY_BASE_URL, "").trim().isEmpty()
+        return !baseUrl(context).isEmpty()
                 && MemberSessionSettings.get(context).isAuthenticated();
+    }
+
+    static String baseUrl(Context context) {
+        SharedPreferences prefs = preferences(context);
+        String saved = prefs.getString(KEY_BASE_URL, "");
+        String resolved = resolveBaseUrl(saved, BuildConfig.API_BASE_URL);
+        if (!resolved.equals(MediaUploadClient.trimTrailingSlash(saved))) {
+            prefs.edit().putString(KEY_BASE_URL, resolved).apply();
+        }
+        return resolved;
+    }
+
+    static String resolveBaseUrl(String saved, String builtIn) {
+        String savedURL = MediaUploadClient.trimTrailingSlash(saved);
+        String builtInURL = MediaUploadClient.trimTrailingSlash(builtIn);
+        if (savedURL.isEmpty()) return builtInURL;
+        if (builtInURL.startsWith("https://") && isLoopback(savedURL)) return builtInURL;
+        return savedURL;
+    }
+
+    private static boolean isLoopback(String value) {
+        try {
+            String host = new URL(value).getHost();
+            return "localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host)
+                    || "::1".equals(host) || "10.0.2.2".equals(host);
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     static int lookbackDays(Context context) {

@@ -34,7 +34,7 @@ public final class PhotoSyncWorker extends Worker {
             return Result.success();
         }
 
-        String baseUrl = prefs.getString(PhotoSync.KEY_BASE_URL, "").trim();
+        String baseUrl = PhotoSync.baseUrl(context);
         String memberToken = MemberSessionSettings.get(context).accessToken;
         int lookbackDays = PhotoSync.lookbackDays(context);
         if (!PhotoSyncWindow.isValidDays(lookbackDays)) {

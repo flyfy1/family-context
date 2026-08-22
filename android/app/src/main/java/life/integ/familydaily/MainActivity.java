@@ -316,10 +316,7 @@ public class MainActivity extends android.app.Activity {
                 JSONObject member = credential.getJSONObject("member");
                 MemberSessionSettings.save(this, credential.getString("accessToken"), credential.optString("expiresAt"),
                         member.getString("id"), member.getString("name"), member.optString("role", MemberProfileSettings.MEMBER));
-                android.content.SharedPreferences photoPrefs = PhotoSync.preferences(this);
-                if (photoPrefs.getString(PhotoSync.KEY_BASE_URL, "").trim().isEmpty()) {
-                    photoPrefs.edit().putString(PhotoSync.KEY_BASE_URL, MediaUploadClient.trimTrailingSlash(BuildConfig.API_BASE_URL)).apply();
-                }
+                PhotoSync.baseUrl(this);
                 runOnUiThread(this::recreate);
             } catch (Exception error) {
                 runOnUiThread(() -> {
@@ -878,7 +875,7 @@ public class MainActivity extends android.app.Activity {
         baseUrl.setHint(tr("NAS service address, for example https://family.example.com", "NAS 服务地址，例如 https://family.example.com"));
         baseUrl.setSingleLine(true);
         baseUrl.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        baseUrl.setText(prefs.getString(PhotoSync.KEY_BASE_URL, MediaUploadClient.trimTrailingSlash(BuildConfig.API_BASE_URL)));
+        baseUrl.setText(PhotoSync.baseUrl(this));
         fields.addView(baseUrl, fullWidth());
         EditText lookbackDays = new EditText(this);
         lookbackDays.setHint(tr("Days of photos to sync (1–3650)", "同步最近多少天（1-3650）"));
