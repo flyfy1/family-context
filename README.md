@@ -43,7 +43,7 @@ go run .
 - 使用 Gemini 生成并保存 Family Daily；
 - 在浏览器中配置远程 Go API 地址和家庭访问令牌。
 
-后端还提供管理员 API、成员级 Bearer Token、成员文字/图片上传、分享 Prompt 配置，以及成员隔离的 MCP Context 接口。详细契约见 [Docs/family-daily-backend-api-v1.md](Docs/family-daily-backend-api-v1.md)。
+后端还提供成员用户名/密码登录、管理员 API、成员级会话与集成 Token、成员文字/图片上传、分享 Prompt 配置，以及成员隔离的 MCP Context 接口。网页登录后固定为一个成员身份；独立管理员 Token 只在管理操作时输入。详细契约见 [docs/family-daily-backend-api-v1.md](docs/family-daily-backend-api-v1.md)。
 
 ## 开发 React 网页端
 

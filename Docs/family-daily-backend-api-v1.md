@@ -11,9 +11,28 @@
 |---|---|---|
 | 管理员 | `X-Admin-Token` | 创建和修改成员、签发成员令牌、查看家庭数据、修改 Update 可见范围 |
 | 家庭网页 PoC | `X-Family-Token` | 使用当前家庭网页和旧版问答接口 |
-| 家庭成员 | `Authorization: Bearer <member-token>` | 访问自己的 Space、上传内容、配置分享策略、连接自己的 MCP |
+| 家庭成员 | 用户名/密码换取 `Authorization: Bearer <web-session>` | 登录网页、访问自己的 Space、上传内容、配置分享策略 |
+| 成员集成 | `Authorization: Bearer <member-token>` | 手机同步或签发独立 MCP 会话；不作为家人日常网页登录方式 |
 
 生产环境要求 `ADMIN_API_TOKEN` 与 `FAMILY_API_TOKEN` 不同。成员令牌在数据库中只保存 SHA-256 哈希；明文只会在管理员创建成员或轮换令牌时返回一次。
+
+## 成员网页登录
+
+管理员通过独立管理员 Token 为成员设置或重置登录信息：
+
+```text
+PUT  /api/v1/admin/members/{member-id}/login
+POST /api/v1/auth/login
+POST /api/v1/auth/logout
+```
+
+- 用户名统一转为小写，允许 3–32 位字母、数字、点、下划线和连字符；
+- 密码要求 10–128 个字符，只保存 bcrypt 哈希；
+- 登录成功返回 30 天网页登录会话，数据库只保存 Token 的 SHA-256 哈希；
+- 登录失败使用统一错误并限制连续尝试；
+- 重置密码会立即撤销该成员已有的网页登录会话；
+- 网页会话绑定一个成员身份。即使请求提交其他 `memberId`，后端也以会话成员为准；
+- 管理员 Token 不是成员密码。网页只在当前页面会话中使用它，不写入浏览器持久存储。
 
 ## 管理员 API
 
