@@ -18,9 +18,23 @@ final class NotificationPayload {
         this.actionUrl = actionUrl;
     }
 
-    static NotificationPayload fromJSON(JSONObject value) throws JSONException {
-        return fromFields(value.getString("id"), value.optString("title", "Family Daily"),
-                value.getString("message"), value.optString("actionUrl", ""));
+    static NotificationPayload fromJSON(JSONObject value, boolean preferEnglish) throws JSONException {
+        return fromLocalizedFields(value.getString("id"), value.optString("title", "Family Daily"),
+                value.optString("titleEn", ""), value.getString("message"), value.optString("messageEn", ""),
+                value.optString("actionUrl", ""), preferEnglish);
+    }
+
+    static NotificationPayload fromLocalizedFields(String id, String title, String titleEn, String message,
+                                                    String messageEn, String actionUrl, boolean preferEnglish) throws JSONException {
+        if (preferEnglish) {
+            title = localizedOrFallback(titleEn, title);
+            message = localizedOrFallback(messageEn, message);
+        }
+        return fromFields(id, title, message, actionUrl);
+    }
+
+    private static String localizedOrFallback(String localized, String fallback) {
+        return localized == null || localized.trim().isEmpty() ? fallback : localized;
     }
 
     static NotificationPayload fromFields(String id, String title, String message, String actionUrl) throws JSONException {

@@ -27,6 +27,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.Collections;
+import java.util.Locale;
 import java.util.Set;
 
 public final class NotificationSyncWorker extends Worker {
@@ -63,7 +64,7 @@ public final class NotificationSyncWorker extends Worker {
                 if (!value.isNull("readAt") || delivered.contains(value.optString("id"))) continue;
                 NotificationPayload payload;
                 try {
-                    payload = NotificationPayload.fromJSON(value);
+                    payload = NotificationPayload.fromJSON(value, "en".equalsIgnoreCase(Locale.getDefault().getLanguage()));
                 } catch (JSONException invalidOrNonActionable) {
                     continue;
                 }

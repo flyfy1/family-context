@@ -25,6 +25,15 @@ public class NotificationPayloadTest {
     }
 
     @Test
+    public void selectsEnglishNotificationContentWhenRequested() throws Exception {
+        NotificationPayload payload = NotificationPayload.fromLocalizedFields("notice-en", "家里想你了", "We miss you",
+                "点这里看看家人的近况。", "Tap to see how everyone is doing.",
+                "https://family.integ.life/#/feed", true);
+        assertEquals("We miss you", payload.title);
+        assertEquals("Tap to see how everyone is doing.", payload.message);
+    }
+
+    @Test
     public void rejectsNonActionableInboxRows() throws Exception {
         boolean rejected = false;
         try {
