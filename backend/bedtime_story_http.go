@@ -152,6 +152,18 @@ func (a *app) retryBedtimeStoryAudio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if story.Status == "ready" {
+		if story.ErrorMessage != "" {
+			story.ErrorMessage = ""
+			story.UpdatedAt = time.Now().UTC()
+			if err := a.store.finishBedtimeStoryAudio(r.Context(), story, story.ID+".wav"); err != nil {
+				writeError(w, http.StatusInternalServerError, "暂时无法修复故事音频状态")
+				return
+			}
+			if err := persistBedtimeStoryToSpace(a.spacesRoot, story); err != nil {
+				writeError(w, http.StatusInternalServerError, "故事状态已修复，但暂时无法更新本地文件")
+				return
+			}
+		}
 		writeJSON(w, http.StatusOK, story)
 		return
 	}
