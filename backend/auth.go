@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"net/http"
 	"strings"
+	"time"
 )
 
 type memberContextKey struct{}
@@ -42,7 +43,12 @@ func (a *app) authenticateMember(r *http.Request) (Member, bool) {
 	if token == "" {
 		return Member{}, false
 	}
-	member, err := a.store.memberByTokenHash(r.Context(), hashToken(token))
+	tokenHash := hashToken(token)
+	if strings.HasPrefix(token, "fds_") {
+		member, err := a.store.memberByWebSessionTokenHash(r.Context(), tokenHash, time.Now().UTC())
+		return member, err == nil
+	}
+	member, err := a.store.memberByTokenHash(r.Context(), tokenHash)
 	return member, err == nil
 }
 
@@ -52,6 +58,8 @@ func memberFromContext(ctx context.Context) Member {
 }
 
 func newAccessToken() string { return "fdm_" + newID() + newID() }
+
+func newWebSessionToken() string { return "fds_" + newID() + newID() }
 
 func hashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))

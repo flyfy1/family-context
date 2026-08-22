@@ -38,6 +38,10 @@ func openStore(path string) (*store, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := s.migrateMemberAuth(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return s, nil
 }
 
@@ -218,9 +222,13 @@ CREATE INDEX IF NOT EXISTS idx_bedtime_stories_child_created ON bedtime_stories(
 	}
 	for _, table := range []string{"daily_summaries", "bedtime_stories"} {
 		added, err := ensureLanguageColumn(ctx, s.db, table)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		if added {
-			if _, err := s.db.ExecContext(ctx, `UPDATE `+table+` SET language = 'zh'`); err != nil { return err }
+			if _, err := s.db.ExecContext(ctx, `UPDATE `+table+` SET language = 'zh'`); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -228,18 +236,29 @@ CREATE INDEX IF NOT EXISTS idx_bedtime_stories_child_created ON bedtime_stories(
 
 func ensureLanguageColumn(ctx context.Context, db *sql.DB, table string) (bool, error) {
 	rows, err := db.QueryContext(ctx, `PRAGMA table_info(`+table+`)`)
-	if err != nil { return false, err }
+	if err != nil {
+		return false, err
+	}
 	found := false
 	for rows.Next() {
 		var cid int
 		var name, columnType string
 		var notNull, primaryKey int
 		var defaultValue any
-		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil { rows.Close(); return false, err }
-		if name == "language" { found = true }
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			rows.Close()
+			return false, err
+		}
+		if name == "language" {
+			found = true
+		}
 	}
-	if err := rows.Close(); err != nil { return false, err }
-	if found { return false, nil }
+	if err := rows.Close(); err != nil {
+		return false, err
+	}
+	if found {
+		return false, nil
+	}
 	_, err = db.ExecContext(ctx, `ALTER TABLE `+table+` ADD COLUMN language TEXT NOT NULL DEFAULT 'en'`)
 	return err == nil, err
 }

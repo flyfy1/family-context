@@ -96,6 +96,18 @@ type MemberCredential struct {
 	AccessToken string `json:"accessToken"`
 }
 
+type MemberLoginStatus struct {
+	MemberID string `json:"memberId"`
+	Username string `json:"username"`
+	HasLogin bool   `json:"hasLogin"`
+}
+
+type MemberLoginCredential struct {
+	Member      Member    `json:"member"`
+	AccessToken string    `json:"accessToken"`
+	ExpiresAt   time.Time `json:"expiresAt"`
+}
+
 type MediaAnalysis struct {
 	Summary             string                `json:"summary"`
 	SuggestedCaption    string                `json:"suggestedCaption"`

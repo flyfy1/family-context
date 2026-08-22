@@ -35,6 +35,8 @@ type app struct {
 	adminToken  string
 	mcpMu       sync.Mutex
 	mcpSessions map[string]string
+	loginMu     sync.Mutex
+	loginTries  map[string]loginAttempt
 }
 
 func newApp(store *store, ai audioProcessor, mediaDir, apiToken string) *app {
@@ -63,7 +65,7 @@ func newApp(store *store, ai audioProcessor, mediaDir, apiToken string) *app {
 		tts = stubAudioProcessor{}
 	}
 	return &app{store: store, ai: ai, summarizer: summarizer, sharePolicy: sharePolicy, mediaAI: mediaAI, storyAI: storyAI, tts: tts, mediaDir: mediaDir, spacesRoot: spacesRoot, apiToken: apiToken,
-		adminToken: envOr("ADMIN_API_TOKEN", apiToken), mcpSessions: make(map[string]string)}
+		adminToken: envOr("ADMIN_API_TOKEN", apiToken), mcpSessions: make(map[string]string), loginTries: make(map[string]loginAttempt)}
 }
 
 func (a *app) routes() http.Handler {
@@ -78,6 +80,8 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("GET /oauth/authorize", a.mcpOAuthAuthorize)
 	mux.HandleFunc("POST /oauth/authorize", a.mcpOAuthAuthorize)
 	mux.HandleFunc("POST /oauth/token", a.mcpOAuthToken)
+	mux.HandleFunc("POST /api/v1/auth/login", a.memberLogin)
+	mux.HandleFunc("POST /api/v1/auth/logout", a.memberAuthorized(a.memberLogout))
 	mux.Handle("GET /media/", a.authorize(http.StripPrefix("/media/", http.FileServer(http.Dir(a.mediaDir)))))
 	mux.HandleFunc("GET /api/v1/questions", a.authorized(a.listQuestions))
 	mux.HandleFunc("POST /api/v1/questions", a.authorized(a.createQuestion))
@@ -105,6 +109,7 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/admin/members", a.adminAuthorized(a.adminCreateMember))
 	mux.HandleFunc("PUT /api/v1/admin/members/{id}", a.adminAuthorized(a.adminUpdateMember))
 	mux.HandleFunc("POST /api/v1/admin/members/{id}/token", a.adminAuthorized(a.adminRotateMemberToken))
+	mux.HandleFunc("PUT /api/v1/admin/members/{id}/login", a.adminAuthorized(a.adminSetMemberLogin))
 	mux.HandleFunc("GET /api/v1/admin/members/{id}/mcp-sessions", a.adminAuthorized(a.adminListMemberMCPSessions))
 	mux.HandleFunc("POST /api/v1/admin/members/{id}/mcp-sessions", a.adminAuthorized(a.adminCreateMemberMCPSession))
 	mux.HandleFunc("DELETE /api/v1/admin/members/{id}/mcp-sessions/{sessionId}", a.adminAuthorized(a.adminRevokeMemberMCPSession))

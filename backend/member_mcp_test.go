@@ -212,7 +212,9 @@ func requestScopedJSON[T any](t *testing.T, client *http.Client, method, url str
 	data, _ := json.Marshal(input)
 	req, _ := http.NewRequest(method, url, bytes.NewReader(data))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set(header, value)
+	if header != "" {
+		req.Header.Set(header, value)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -222,6 +224,9 @@ func requestScopedJSON[T any](t *testing.T, client *http.Client, method, url str
 		t.Fatalf("%s %s status=%d want=%d", method, url, resp.StatusCode, status)
 	}
 	var output T
+	if status == http.StatusNoContent {
+		return output
+	}
 	if err := json.NewDecoder(resp.Body).Decode(&output); err != nil {
 		t.Fatal(err)
 	}
