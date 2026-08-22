@@ -104,7 +104,7 @@ function App() {
     {!elderMode && <Sidebar route={route} familyName={config.familyName} />}
     <main className="main-shell">
       {!elderMode && <Topbar route={route} currentMember={currentMember} onSignOut={signOut} language={language} onLanguageChange={next => setConfig(current => ({ ...current, language: next }))} />}
-      {!elderMode && !error && <NotificationInbox api={api} currentMember={currentMember} notify={notify} refreshKey={refreshKey} />}
+      {!elderMode && !error && <NotificationInbox api={api} currentMember={currentMember} notify={notify} refreshKey={refreshKey} language={language} />}
       {error && route !== "/settings" && <ConnectionError message={error} onSettings={() => { location.hash = "/settings"; }} />}
       {route === "/settings" && <Settings api={api} config={config} setConfig={setConfig} members={members} currentMember={currentMember} refresh={refresh} notify={notify} />}
       {!error && !loading && members.length === 0 && route !== "/settings" && <Onboarding onStart={() => { location.hash = "/settings"; }} />}
@@ -178,9 +178,11 @@ function FamilyFeed({ api, members, currentMember, notify, refreshKey }) {
     api(`/api/v1/daily-summaries/latest?language=${language}`).then(data => setSummary(data.summary)),
   ]).finally(() => setLoading(false));
   useEffect(() => { reload().catch(error => notify(error.message)); }, [refreshKey, api]);
+	const attentionMembers = members.filter(member => member.needsAttention);
 
   return <div className="page-grid feed-layout">
     <section>
+	  {attentionMembers.length > 0 && <AttentionBanner members={attentionMembers} />}
       <Composer api={api} currentMember={currentMember} notify={notify} onCreated={reload} />
       <SectionHeading eyebrow="SHARED CONTEXT" title={tx("What the family is sharing", "一家人的近况")} count={updates.length} />
       {loading ? <CardSkeleton /> : updates.length ? <div className="update-list">{updates.map(update => <UpdateCard key={update.id} update={update} member={members.find(item => item.id === update.memberId)} api={api} notify={notify} />)}</div> : <EmptyState icon="✦" title={tx("The family feed is empty", "家庭动态还是空的")} text={tx("Share the first family update and let everyone know how your day is going.", "发布第一条家庭可见 Update，让大家知道你今天过得怎么样。")} />}
@@ -191,6 +193,12 @@ function FamilyFeed({ api, members, currentMember, notify, refreshKey }) {
       <PrivacyCard />
     </aside>
   </div>;
+}
+
+function AttentionBanner({ members }) {
+  const { tx } = useLanguage();
+  const names = members.map(member => member.name).join(tx(", ", "、"));
+  return <section className="attention-banner" role="status"><span aria-hidden="true">!</span><div><strong>{tx("Needs attention", "需要关注")}</strong><p>{tx(`${names} may need a check-in after a period without activity.`, `${names} 最近没有活动，值得主动联系一下。`)}</p></div></section>;
 }
 
 function Composer({ api, currentMember, notify, onCreated }) {
@@ -573,7 +581,7 @@ function DailyCard({ api, summary, onGenerated, notify }) {
 
 function FamilyMembers({ members }) {
   const { tx } = useLanguage();
-  return <section className="rail-card"><div className="rail-title"><strong>{tx("Family members", "家庭成员")}</strong><a href="#/settings">{tx("Manage", "管理")}</a></div><div className="member-row">{members.map(member => <div key={member.id} title={member.name}><Avatar member={member} /><span>{member.name}</span></div>)}</div></section>;
+  return <section className="rail-card"><div className="rail-title"><strong>{tx("Family members", "家庭成员")}</strong><a href="#/settings">{tx("Manage", "管理")}</a></div><div className="member-row">{members.map(member => <div className={member.needsAttention ? "needs-attention" : ""} key={member.id} title={member.name}><Avatar member={member} /><span>{member.name}</span>{member.needsAttention && <small className="attention-badge">{tx("Attention", "需关注")}</small>}</div>)}</div></section>;
 }
 
 function FamilyTree({ members }) {

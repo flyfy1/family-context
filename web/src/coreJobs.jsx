@@ -19,7 +19,7 @@ async function adminRequest(apiBase, token, path, options = {}) {
   return body;
 }
 
-export function NotificationInbox({ api, currentMember, notify, refreshKey }) {
+export function NotificationInbox({ api, currentMember, notify, refreshKey, language }) {
   const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
@@ -42,7 +42,7 @@ export function NotificationInbox({ api, currentMember, notify, refreshKey }) {
   return <section className="notification-inbox" aria-label="Family reminders">
     {notifications.slice(0, 3).map(notification => <article key={notification.id} className="notification-item">
       <span className="notification-icon">!</span>
-      <div><strong>{notificationTitle(notification.type, language)}</strong><p>{notification.message}</p></div>
+      <div><strong>{notification.title || notificationTitle(notification.type, language)}</strong><p>{notification.message}</p></div>
       <button type="button" onClick={() => acknowledge(notification)}>{text(language, "Got it", "知道了")}</button>
     </article>)}
   </section>;

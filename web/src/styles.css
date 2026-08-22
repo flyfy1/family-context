@@ -52,6 +52,10 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
 .member-switcher select, .language-switcher select { min-height: 42px; padding: 0 35px 0 13px; border: 1px solid var(--line); border-radius: 11px; outline: none; color: var(--ink); background: var(--card); font-weight: 700; }
 .page-grid { display: grid; grid-template-columns: minmax(0, 1fr) 316px; gap: 42px; padding-top: 40px; align-items: start; }
 .right-rail { display: grid; gap: 16px; }
+.attention-banner { display: flex; align-items: center; gap: 13px; margin: 0 0 18px; padding: 15px 17px; border: 1px solid rgba(173,76,52,.25); border-radius: 16px; color: var(--rust-dark); background: #fff2ea; box-shadow: 0 10px 25px rgba(133,54,35,.07); }
+.attention-banner > span { flex: 0 0 auto; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; color: white; background: var(--rust); font-family: Georgia, serif; font-size: 18px; font-weight: 800; }
+.attention-banner strong { font-size: 13px; }
+.attention-banner p { margin: 3px 0 0; color: #785344; font-size: 11px; line-height: 1.5; }
 .card { background: var(--card); border: 1px solid rgba(255,255,255,.85); border-radius: 20px; box-shadow: var(--shadow); }
 .eyebrow { margin-bottom: 8px; color: var(--rust); font-family: Inter, sans-serif; font-size: 10px; font-weight: 850; letter-spacing: .16em; }
 .primary-button, .secondary-button { min-height: 44px; padding: 0 18px; border: 0; border-radius: 11px; font-weight: 780; transition: transform .15s, background .15s; }
@@ -133,6 +137,8 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
 .rail-title a { color: var(--rust); font-size: 10px; text-decoration: none; }
 .member-row { display: flex; gap: 13px; overflow-x: auto; }
 .member-row > div { display: grid; justify-items: center; gap: 6px; min-width: 42px; color: var(--muted); font-size: 10px; }
+.member-row > div.needs-attention .avatar { box-shadow: 0 0 0 3px #fff2ea, 0 0 0 5px rgba(173,76,52,.42); }
+.attention-badge { padding: 2px 5px; border-radius: 99px; color: var(--rust-dark); background: #fff2ea; font-size: 7px; font-weight: 850; white-space: nowrap; }
 .privacy-card { display: flex; gap: 12px; padding: 17px; color: var(--muted); background: rgba(255,255,255,.34); border-radius: 15px; }
 .privacy-card > span { color: var(--sage); font-size: 19px; }
 .privacy-card strong { color: var(--ink); font-size: 11px; }
