@@ -12,15 +12,16 @@ import (
 )
 
 type CoreJobRule struct {
-	ID               string    `json:"id"`
-	FamilyID         string    `json:"familyId"`
-	TargetMemberID   string    `json:"targetMemberId"`
-	TargetMemberName string    `json:"targetMemberName"`
-	Enabled          bool      `json:"enabled"`
-	IncludeTarget    bool      `json:"includeTarget"`
-	InactivityHours  int       `json:"inactivityHours"`
-	ReminderText     string    `json:"reminderText"`
-	UpdatedAt        time.Time `json:"updatedAt"`
+	ID                 string    `json:"id"`
+	FamilyID           string    `json:"familyId"`
+	TargetMemberID     string    `json:"targetMemberId"`
+	TargetMemberName   string    `json:"targetMemberName"`
+	Enabled            bool      `json:"enabled"`
+	IncludeTarget      bool      `json:"includeTarget"`
+	RecipientMemberIDs []string  `json:"recipientMemberIds,omitempty"`
+	InactivityHours    int       `json:"inactivityHours"`
+	ReminderText       string    `json:"reminderText"`
+	UpdatedAt          time.Time `json:"updatedAt"`
 }
 
 type Notification struct {
@@ -70,6 +71,12 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 CREATE INDEX IF NOT EXISTS idx_core_job_rules_family ON core_job_rules(family_id, enabled);
 CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications(recipient_member_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS core_job_rule_recipients (
+  rule_id TEXT NOT NULL REFERENCES core_job_rules(id) ON DELETE CASCADE,
+  member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  PRIMARY KEY(rule_id, member_id)
+);
 `)
 	if err != nil {
 		return err
@@ -133,7 +140,16 @@ func (s *store) listCoreJobRules(ctx context.Context, familyID string) ([]CoreJo
 		}
 		rules = append(rules, rule)
 	}
-	return rules, rows.Err()
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	for index := range rules {
+		rules[index].RecipientMemberIDs, err = s.memberIDsForRelation(ctx, "core_job_rule_recipients", "rule_id", rules[index].ID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return rules, nil
 }
 
 func (s *store) saveCoreJobRule(ctx context.Context, rule CoreJobRule) (CoreJobRule, error) {
@@ -143,6 +159,9 @@ func (s *store) saveCoreJobRule(ctx context.Context, rule CoreJobRule) (CoreJobR
 	}
 	if member.FamilyID != rule.FamilyID {
 		return CoreJobRule{}, sql.ErrNoRows
+	}
+	if err := s.validateFamilyMemberIDs(ctx, rule.FamilyID, rule.RecipientMemberIDs); err != nil {
+		return CoreJobRule{}, err
 	}
 	if rule.ID == "" {
 		rule.ID = newID()
@@ -154,6 +173,11 @@ func (s *store) saveCoreJobRule(ctx context.Context, rule CoreJobRule) (CoreJobR
 		rule.ID, rule.FamilyID, rule.TargetMemberID, rule.Enabled, rule.IncludeTarget, rule.InactivityHours, rule.ReminderText, rule.UpdatedAt.Format(time.RFC3339Nano))
 	if err != nil {
 		return CoreJobRule{}, err
+	}
+	if rule.RecipientMemberIDs != nil {
+		if err := s.replaceMemberRelation(ctx, "core_job_rule_recipients", "rule_id", rule.ID, rule.RecipientMemberIDs); err != nil {
+			return CoreJobRule{}, err
+		}
 	}
 	var stored CoreJobRule
 	var enabled, includeTarget int
@@ -167,6 +191,9 @@ func (s *store) saveCoreJobRule(ctx context.Context, rule CoreJobRule) (CoreJobR
 	stored.Enabled = enabled == 1
 	stored.IncludeTarget = includeTarget == 1
 	stored.UpdatedAt, err = time.Parse(time.RFC3339Nano, updatedAt)
+	if err == nil {
+		stored.RecipientMemberIDs, err = s.memberIDsForRelation(ctx, "core_job_rule_recipients", "rule_id", stored.ID)
+	}
 	return stored, err
 }
 
@@ -224,7 +251,16 @@ func (s *store) enabledCoreJobRules(ctx context.Context) ([]CoreJobRule, error) 
 		}
 		rules = append(rules, rule)
 	}
-	return rules, rows.Err()
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	for index := range rules {
+		rules[index].RecipientMemberIDs, err = s.memberIDsForRelation(ctx, "core_job_rule_recipients", "rule_id", rules[index].ID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return rules, nil
 }
 
 func (s *store) memberLastActivity(ctx context.Context, memberID string) (time.Time, error) {
@@ -240,6 +276,9 @@ func (s *store) memberLastActivity(ctx context.Context, memberID string) (time.T
 }
 
 func (s *store) createInactivityNotifications(ctx context.Context, rule CoreJobRule, lastActivity, now time.Time) (int, error) {
+	if len(rule.RecipientMemberIDs) > 0 {
+		return s.createInactivityNotificationsFor(ctx, rule, rule.RecipientMemberIDs, lastActivity, now)
+	}
 	query := `SELECT id FROM members WHERE family_id = ?`
 	args := []any{rule.FamilyID}
 	if !rule.IncludeTarget {
@@ -263,6 +302,10 @@ func (s *store) createInactivityNotifications(ctx context.Context, rule CoreJobR
 	if err := rows.Close(); err != nil {
 		return 0, err
 	}
+	return s.createInactivityNotificationsFor(ctx, rule, recipients, lastActivity, now)
+}
+
+func (s *store) createInactivityNotificationsFor(ctx context.Context, rule CoreJobRule, recipients []string, lastActivity, now time.Time) (int, error) {
 	incidentKey := "no-post:" + rule.ID + ":" + lastActivity.UTC().Format(time.RFC3339Nano)
 	created := 0
 	for _, recipientID := range recipients {
@@ -352,11 +395,12 @@ func (a *app) adminListCoreJobRules(w http.ResponseWriter, r *http.Request) {
 func (a *app) adminSaveCoreJobRule(w http.ResponseWriter, r *http.Request) {
 	memberID := strings.TrimSpace(r.PathValue("memberId"))
 	var input struct {
-		FamilyID        string `json:"familyId"`
-		Enabled         bool   `json:"enabled"`
-		IncludeTarget   bool   `json:"includeTarget"`
-		InactivityHours int    `json:"inactivityHours"`
-		ReminderText    string `json:"reminderText"`
+		FamilyID           string   `json:"familyId"`
+		Enabled            bool     `json:"enabled"`
+		IncludeTarget      bool     `json:"includeTarget"`
+		RecipientMemberIDs []string `json:"recipientMemberIds"`
+		InactivityHours    int      `json:"inactivityHours"`
+		ReminderText       string   `json:"reminderText"`
 	}
 	if err := readJSON(r, &input); err != nil {
 		writeError(w, http.StatusBadRequest, "检测规则格式不正确")
@@ -372,7 +416,7 @@ func (a *app) adminSaveCoreJobRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rule, err := a.store.saveCoreJobRule(r.Context(), CoreJobRule{FamilyID: input.FamilyID, TargetMemberID: memberID,
-		Enabled: input.Enabled, IncludeTarget: input.IncludeTarget, InactivityHours: input.InactivityHours, ReminderText: input.ReminderText, UpdatedAt: time.Now().UTC()})
+		Enabled: input.Enabled, IncludeTarget: input.IncludeTarget, RecipientMemberIDs: input.RecipientMemberIDs, InactivityHours: input.InactivityHours, ReminderText: input.ReminderText, UpdatedAt: time.Now().UTC()})
 	if errors.Is(err, sql.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "没有找到这个家庭成员")
 		return

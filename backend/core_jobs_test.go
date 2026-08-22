@@ -188,3 +188,37 @@ func TestCoreJobAdminConfigurationAndRecipientAPI(t *testing.T) {
 		t.Fatalf("unexpected subject notifications: %+v", subjectNotifications.Notifications)
 	}
 }
+
+func TestCoreJobUsesExplicitRecipientSelection(t *testing.T) {
+	store, err := openStore(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close() })
+	ctx := context.Background()
+	now := time.Now().UTC()
+	for _, member := range []Member{
+		{ID: "elder", FamilyID: defaultFamilyID, Name: "奶奶", Role: "elder", CreatedAt: now.Add(-48 * time.Hour)},
+		{ID: "daughter", FamilyID: defaultFamilyID, Name: "女儿", Role: "member", CreatedAt: now.Add(-48 * time.Hour)},
+		{ID: "son", FamilyID: defaultFamilyID, Name: "儿子", Role: "member", CreatedAt: now.Add(-48 * time.Hour)},
+	} {
+		if err := store.createMember(ctx, member); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rule, err := store.saveCoreJobRule(ctx, CoreJobRule{FamilyID: defaultFamilyID, TargetMemberID: "elder", Enabled: true,
+		RecipientMemberIDs: []string{"elder", "daughter"}, InactivityHours: 24, UpdatedAt: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rule.RecipientMemberIDs) != 2 {
+		t.Fatalf("selection not stored: %+v", rule)
+	}
+	result, err := store.runCoreJobs(ctx, now)
+	if err != nil || result.NotificationsCreated != 2 {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+	if notifications, _ := store.listNotifications(ctx, defaultFamilyID, "son"); len(notifications) != 0 {
+		t.Fatalf("unselected member was notified: %+v", notifications)
+	}
+}

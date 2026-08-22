@@ -23,6 +23,7 @@ type ScheduledJob struct {
 	TargetMemberID   string     `json:"targetMemberId,omitempty"`
 	TargetMemberName string     `json:"targetMemberName,omitempty"`
 	IncludeTarget    bool       `json:"includeTarget"`
+	MemberIDs        []string   `json:"memberIds,omitempty"`
 	BirthdayMonthDay string     `json:"birthdayMonthDay,omitempty"`
 	RemindDaysBefore int        `json:"remindDaysBefore,omitempty"`
 	TimeZone         string     `json:"timeZone,omitempty"`
@@ -63,8 +64,17 @@ CREATE TABLE IF NOT EXISTS scheduled_jobs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_scheduled_jobs_family ON scheduled_jobs(family_id, job_type, enabled);
+
+CREATE TABLE IF NOT EXISTS scheduled_job_members (
+  job_id TEXT NOT NULL REFERENCES scheduled_jobs(id) ON DELETE CASCADE,
+  member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  PRIMARY KEY(job_id, member_id)
+);
 `)
-	return err
+	if err != nil {
+		return err
+	}
+	return s.migrateActivityThreads(ctx)
 }
 
 func (s *store) listScheduledJobs(ctx context.Context, familyID string) ([]ScheduledJob, error) {
@@ -92,7 +102,16 @@ func (s *store) queryScheduledJobs(ctx context.Context, condition string, args .
 		}
 		jobs = append(jobs, job)
 	}
-	return jobs, rows.Err()
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	for index := range jobs {
+		jobs[index].MemberIDs, err = s.memberIDsForRelation(ctx, "scheduled_job_members", "job_id", jobs[index].ID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return jobs, nil
 }
 
 func scanScheduledJob(row rowScanner) (ScheduledJob, error) {
@@ -138,6 +157,9 @@ func (s *store) saveScheduledJob(ctx context.Context, job ScheduledJob) (Schedul
 	if err := s.validateScheduledJob(ctx, job); err != nil {
 		return ScheduledJob{}, err
 	}
+	if err := s.validateFamilyMemberIDs(ctx, job.FamilyID, job.MemberIDs); err != nil {
+		return ScheduledJob{}, err
+	}
 	targetMemberID := any(nil)
 	if job.TargetMemberID != "" {
 		targetMemberID = job.TargetMemberID
@@ -167,6 +189,11 @@ func (s *store) saveScheduledJob(ctx context.Context, job ScheduledJob) (Schedul
 		}
 		if rows, _ := result.RowsAffected(); rows == 0 {
 			return ScheduledJob{}, sql.ErrNoRows
+		}
+	}
+	if job.MemberIDs != nil {
+		if err := s.replaceMemberRelation(ctx, "scheduled_job_members", "job_id", job.ID, job.MemberIDs); err != nil {
+			return ScheduledJob{}, err
 		}
 	}
 	return s.getScheduledJob(ctx, job.FamilyID, job.ID)
@@ -206,7 +233,12 @@ func (s *store) getScheduledJob(ctx context.Context, familyID, id string) (Sched
 		j.include_target, j.birthday_month_day, j.remind_days_before, j.time_zone, j.scheduled_for, j.topic, j.message,
 		j.enabled, j.completed_at, j.created_at, j.updated_at
 		FROM scheduled_jobs j LEFT JOIN members m ON m.id = j.target_member_id WHERE j.family_id = ? AND j.id = ?`, familyID, id)
-	return scanScheduledJob(row)
+	job, err := scanScheduledJob(row)
+	if err != nil {
+		return ScheduledJob{}, err
+	}
+	job.MemberIDs, err = s.memberIDsForRelation(ctx, "scheduled_job_members", "job_id", job.ID)
+	return job, err
 }
 
 func (s *store) deleteScheduledJob(ctx context.Context, familyID, id string) error {
@@ -234,15 +266,22 @@ func (s *store) runScheduledJobs(ctx context.Context, now time.Time) (scheduledJ
 		if !due {
 			continue
 		}
+		threadCreated := false
+		if job.Type == scheduledJobFamilyActivity {
+			threadCreated, err = s.ensureScheduledActivityThread(ctx, job, now)
+			if err != nil {
+				return result, err
+			}
+		}
 		created, err := s.createScheduledJobNotifications(ctx, job, incidentKey, now)
 		if err != nil {
 			return result, err
 		}
 		result.NotificationsCreated += created
-		if created > 0 {
+		if created > 0 || threadCreated {
 			result.Triggered++
 		}
-		if job.Type == scheduledJobFamilyActivity && created > 0 {
+		if job.Type == scheduledJobFamilyActivity && (created > 0 || threadCreated) {
 			if _, err := s.db.ExecContext(ctx, `UPDATE scheduled_jobs SET completed_at = ?, updated_at = ? WHERE id = ?`,
 				now.UTC().Format(time.RFC3339Nano), now.UTC().Format(time.RFC3339Nano), job.ID); err != nil {
 				return result, err
@@ -297,6 +336,9 @@ func birthdayInYear(monthDay string, year int, location *time.Location) (time.Ti
 }
 
 func (s *store) createScheduledJobNotifications(ctx context.Context, job ScheduledJob, incidentKey string, now time.Time) (int, error) {
+	if len(job.MemberIDs) > 0 {
+		return s.createScheduledJobNotificationsFor(ctx, job, job.MemberIDs, incidentKey, now)
+	}
 	query := `SELECT id FROM members WHERE family_id = ?`
 	args := []any{job.FamilyID}
 	if job.Type == scheduledJobBirthday && !job.IncludeTarget {
@@ -320,6 +362,10 @@ func (s *store) createScheduledJobNotifications(ctx context.Context, job Schedul
 	if err := rows.Close(); err != nil {
 		return 0, err
 	}
+	return s.createScheduledJobNotificationsFor(ctx, job, recipients, incidentKey, now)
+}
+
+func (s *store) createScheduledJobNotificationsFor(ctx context.Context, job ScheduledJob, recipients []string, incidentKey string, now time.Time) (int, error) {
 	created := 0
 	for _, recipientID := range recipients {
 		message := scheduledJobMessage(job, recipientID, now)
@@ -398,6 +444,7 @@ func (a *app) adminSaveScheduledJob(w http.ResponseWriter, r *http.Request, id s
 		Topic            string     `json:"topic"`
 		Message          string     `json:"message"`
 		Enabled          bool       `json:"enabled"`
+		MemberIDs        []string   `json:"memberIds"`
 	}
 	if err := readJSON(r, &input); err != nil {
 		writeError(w, http.StatusBadRequest, "自动任务格式不正确")
@@ -410,6 +457,7 @@ func (a *app) adminSaveScheduledJob(w http.ResponseWriter, r *http.Request, id s
 	now := time.Now().UTC()
 	job, err := a.store.saveScheduledJob(r.Context(), ScheduledJob{ID: id, FamilyID: input.FamilyID, Type: strings.TrimSpace(input.Type),
 		Title: strings.TrimSpace(input.Title), TargetMemberID: strings.TrimSpace(input.TargetMemberID), IncludeTarget: input.IncludeTarget,
+		MemberIDs:        input.MemberIDs,
 		BirthdayMonthDay: strings.TrimSpace(input.BirthdayMonthDay), RemindDaysBefore: input.RemindDaysBefore, TimeZone: strings.TrimSpace(input.TimeZone),
 		ScheduledFor: input.ScheduledFor, Topic: strings.TrimSpace(input.Topic), Message: strings.TrimSpace(input.Message), Enabled: input.Enabled,
 		CreatedAt: now, UpdatedAt: now})
