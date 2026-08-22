@@ -3,7 +3,6 @@ import { createRoot } from "react-dom/client";
 import "./styles.css";
 import LandingPage from "./LandingPage";
 import { CoreJobSettings, NotificationInbox } from "./coreJobs";
-import LandingPage from "./LandingPage";
 
 const FAMILY_ID = "our-family";
 const ROUTES = ["/", "/feed", "/space", "/elder", "/settings"];
