@@ -280,6 +280,11 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
 .mcp-panel { display: grid; gap: 16px; }
 .mcp-setup-intro { padding: 13px 15px; border-left: 3px solid var(--rust); border-radius: 0 10px 10px 0; background: rgba(173,76,52,.06); }
 .mcp-setup-intro strong { font-size: 12px; }.mcp-setup-intro p { margin: 4px 0 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
+.mcp-capabilities { display: grid; gap: 11px; padding: 16px; border: 1px solid rgba(173,76,52,.2); border-radius: 14px; background: #fffaf5; }
+.mcp-capabilities-heading { display: flex; align-items: start; justify-content: space-between; gap: 12px; }.mcp-capabilities-heading > div { display: grid; gap: 3px; }.mcp-capabilities-heading strong { font-size: 14px; }.mcp-capabilities-heading p { margin: 0; color: var(--muted); font-size: 9px; }.mcp-capabilities-heading > span { padding: 5px 7px; border-radius: 99px; color: var(--rust-dark); background: #f3e2d7; font-size: 8px; font-weight: 850; letter-spacing: .08em; white-space: nowrap; }
+.mcp-capability-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.mcp-capability { min-width: 0; display: grid; align-content: start; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: white; }.mcp-capability > div { min-width: 0; display: flex; align-items: center; gap: 7px; }.mcp-capability > div span { padding: 3px 5px; border-radius: 5px; color: #375e55; background: rgba(97,114,105,.12); font-size: 7px; font-weight: 850; letter-spacing: .08em; }.mcp-capability.write > div span { color: var(--rust-dark); background: rgba(173,76,52,.12); }.mcp-capability code { overflow: hidden; color: var(--muted); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }.mcp-capability > strong { font-size: 11px; }.mcp-capability p { margin: 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
+.mcp-capability-note { margin: 0; padding-top: 2px; color: var(--muted); font-size: 9px; line-height: 1.55; }
 .mcp-create { display: flex; align-items: end; gap: 10px; }
 .mcp-create label { flex: 1; display: grid; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 700; }
 .mcp-create input { width: 100%; min-height: 43px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; outline: 0; color: var(--ink); background: #faf6f0; }
@@ -363,7 +368,7 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
   .record-orb { width: 190px; height: 190px; }
   .settings-section { grid-template-columns: 1fr; gap: 22px; padding: 22px; }.tree-nodes { justify-content: flex-start; overflow-x: auto; padding-bottom: 5px; }.tree-nodes::before { left: 56px; right: 56px; }.tree-node { min-width: 108px; }.add-member { grid-template-columns: 1fr; }.add-member .primary-button, .settings-form .primary-button { width: 100%; }
   .share-policy-form fieldset { grid-template-columns: 1fr; }.share-policy-form fieldset span { min-height: 64px; }.policy-actions { align-items: stretch; flex-direction: column-reverse; }.policy-actions button { width: 100%; }
-  .mcp-create { align-items: stretch; flex-direction: column; }.mcp-create .primary-button { width: 100%; }.mcp-client-guides { grid-template-columns: 1fr; }.copy-row { flex-direction: column; }.copy-row button { min-height: 36px; }
+  .mcp-create { align-items: stretch; flex-direction: column; }.mcp-create .primary-button { width: 100%; }.mcp-capability-grid, .mcp-client-guides { grid-template-columns: 1fr; }.copy-row { flex-direction: column; }.copy-row button { min-height: 36px; }
 }
 
 @media (max-width: 430px) {
