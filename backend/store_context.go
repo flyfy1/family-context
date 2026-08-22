@@ -23,7 +23,7 @@ func (s *store) createMember(ctx context.Context, member Member) error {
 }
 
 func (s *store) listMembers(ctx context.Context, familyID string) ([]Member, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, family_id, name, role, is_admin, color, created_at FROM members WHERE family_id = ? ORDER BY created_at`, familyID)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, family_id, name, role, is_admin, needs_attention, color, created_at FROM members WHERE family_id = ? ORDER BY created_at`, familyID)
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +32,7 @@ func (s *store) listMembers(ctx context.Context, familyID string) ([]Member, err
 	for rows.Next() {
 		var member Member
 		var createdAt string
-		if err := rows.Scan(&member.ID, &member.FamilyID, &member.Name, &member.Role, &member.IsAdmin, &member.Color, &createdAt); err != nil {
+		if err := rows.Scan(&member.ID, &member.FamilyID, &member.Name, &member.Role, &member.IsAdmin, &member.NeedsAttention, &member.Color, &createdAt); err != nil {
 			return nil, err
 		}
 		member.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt)

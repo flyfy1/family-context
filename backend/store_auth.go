@@ -70,9 +70,9 @@ func (s *store) memberAndPasswordHashByUsername(ctx context.Context, username st
 	var member Member
 	var createdAt string
 	var passwordHash []byte
-	err := s.db.QueryRowContext(ctx, `SELECT m.id, m.family_id, m.name, m.role, m.is_admin, m.color, m.created_at, l.password_hash
+	err := s.db.QueryRowContext(ctx, `SELECT m.id, m.family_id, m.name, m.role, m.is_admin, m.needs_attention, m.color, m.created_at, l.password_hash
 FROM member_logins l JOIN members m ON m.id = l.member_id WHERE l.username = ? COLLATE NOCASE`, username).
-		Scan(&member.ID, &member.FamilyID, &member.Name, &member.Role, &member.IsAdmin, &member.Color, &createdAt, &passwordHash)
+		Scan(&member.ID, &member.FamilyID, &member.Name, &member.Role, &member.IsAdmin, &member.NeedsAttention, &member.Color, &createdAt, &passwordHash)
 	if err != nil {
 		return Member{}, nil, err
 	}
@@ -89,10 +89,10 @@ func (s *store) createMemberWebSession(ctx context.Context, memberID, tokenHash 
 func (s *store) memberByWebSessionTokenHash(ctx context.Context, tokenHash string, now time.Time) (Member, error) {
 	var member Member
 	var createdAt string
-	err := s.db.QueryRowContext(ctx, `SELECT m.id, m.family_id, m.name, m.role, m.is_admin, m.color, m.created_at
+	err := s.db.QueryRowContext(ctx, `SELECT m.id, m.family_id, m.name, m.role, m.is_admin, m.needs_attention, m.color, m.created_at
 FROM member_web_sessions s JOIN members m ON m.id = s.member_id
 WHERE s.token_hash = ? AND s.revoked_at IS NULL AND s.expires_at > ?`, tokenHash, now.Format(time.RFC3339Nano)).
-		Scan(&member.ID, &member.FamilyID, &member.Name, &member.Role, &member.IsAdmin, &member.Color, &createdAt)
+		Scan(&member.ID, &member.FamilyID, &member.Name, &member.Role, &member.IsAdmin, &member.NeedsAttention, &member.Color, &createdAt)
 	if err != nil {
 		return Member{}, err
 	}

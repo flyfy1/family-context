@@ -26,7 +26,7 @@ if ! command -v jq >/dev/null; then
 fi
 
 payload="$(jq -n --arg title "$title" --arg message "$message" --arg actionUrl "$action_url" \
-  '{title:$title,message:$message,actionUrl:$actionUrl}')"
+	'{title:$title,message:$message,actionUrl:$actionUrl,markNeedsAttention:true}')"
 response="$(printf '%s' "$payload" | ssh "$deploy_host" 'set -euo pipefail
   config="$HOME/.config/family-daily/backend.env"
   admin_token=$(sed -n "s/^ADMIN_API_TOKEN=//p" "$config")
@@ -35,6 +35,8 @@ response="$(printf '%s' "$payload" | ssh "$deploy_host" 'set -euo pipefail
     -H "X-Admin-Token: $admin_token" -H "Content-Type: application/json" --data-binary @-')"
 
 created="$(jq -r '.notificationsCreated // 0' <<<"$response")"
+marked="$(jq -r '.membersMarkedForAttention // 0' <<<"$response")"
+printf 'Marked %s production members as needing attention.\n' "$marked"
 printf 'Created %s member notifications.\n' "$created"
 
 android_adb="${ANDROID_ADB:-$HOME/Library/Android/sdk/platform-tools/adb}"

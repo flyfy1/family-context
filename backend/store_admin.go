@@ -10,8 +10,8 @@ import (
 func (s *store) getMember(ctx context.Context, id string) (Member, error) {
 	var member Member
 	var createdAt string
-	err := s.db.QueryRowContext(ctx, `SELECT id, family_id, name, role, is_admin, color, created_at FROM members WHERE id = ?`, id).
-		Scan(&member.ID, &member.FamilyID, &member.Name, &member.Role, &member.IsAdmin, &member.Color, &createdAt)
+	err := s.db.QueryRowContext(ctx, `SELECT id, family_id, name, role, is_admin, needs_attention, color, created_at FROM members WHERE id = ?`, id).
+		Scan(&member.ID, &member.FamilyID, &member.Name, &member.Role, &member.IsAdmin, &member.NeedsAttention, &member.Color, &createdAt)
 	if err != nil {
 		return Member{}, err
 	}
@@ -47,9 +47,9 @@ func (s *store) setMemberTokenHash(ctx context.Context, memberID, tokenHash stri
 func (s *store) memberByTokenHash(ctx context.Context, tokenHash string) (Member, error) {
 	var member Member
 	var createdAt string
-	err := s.db.QueryRowContext(ctx, `SELECT m.id, m.family_id, m.name, m.role, m.is_admin, m.color, m.created_at
+	err := s.db.QueryRowContext(ctx, `SELECT m.id, m.family_id, m.name, m.role, m.is_admin, m.needs_attention, m.color, m.created_at
 		FROM members m JOIN member_tokens t ON t.member_id = m.id WHERE t.token_hash = ?`, tokenHash).
-		Scan(&member.ID, &member.FamilyID, &member.Name, &member.Role, &member.IsAdmin, &member.Color, &createdAt)
+		Scan(&member.ID, &member.FamilyID, &member.Name, &member.Role, &member.IsAdmin, &member.NeedsAttention, &member.Color, &createdAt)
 	if err != nil {
 		return Member{}, err
 	}

@@ -247,12 +247,17 @@ func TestAdminBroadcastNotificationCreatesMemberScopedHTTPSActions(t *testing.T)
 		map[string]any{"title": "想念你了", "message": "家里好久没有新动态，点这里看看。", "actionUrl": "http://family.integ.life"},
 		"X-Admin-Token", "admin-token", http.StatusBadRequest)
 	result := requestScopedJSON[struct {
-		NotificationsCreated int `json:"notificationsCreated"`
+		NotificationsCreated      int `json:"notificationsCreated"`
+		MembersMarkedForAttention int `json:"membersMarkedForAttention"`
 	}](t, server.Client(), http.MethodPost, server.URL+"/api/v1/admin/notifications/broadcast",
-		map[string]any{"title": "想念你了", "message": "家里好久没有新动态，点这里看看。", "actionUrl": "https://family.integ.life/#/feed"},
+		map[string]any{"title": "想念你了", "message": "家里好久没有新动态，点这里看看。", "actionUrl": "https://family.integ.life/#/feed", "markNeedsAttention": true},
 		"X-Admin-Token", "admin-token", http.StatusCreated)
-	if result.NotificationsCreated != 2 {
+	if result.NotificationsCreated != 2 || result.MembersMarkedForAttention != 2 {
 		t.Fatalf("broadcast result=%+v", result)
+	}
+	members, err := store.listMembers(context.Background(), defaultFamilyID)
+	if err != nil || len(members) != 2 || !members[0].NeedsAttention || !members[1].NeedsAttention {
+		t.Fatalf("attention members=%+v err=%v", members, err)
 	}
 	for _, memberID := range []string{"first", "second"} {
 		notifications, err := store.listNotifications(context.Background(), defaultFamilyID, memberID)

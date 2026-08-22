@@ -60,13 +60,14 @@ type AudioResult struct {
 }
 
 type Member struct {
-	ID        string    `json:"id"`
-	FamilyID  string    `json:"familyId"`
-	Name      string    `json:"name"`
-	Role      string    `json:"role"`
-	IsAdmin   bool      `json:"isAdmin"`
-	Color     string    `json:"color"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID             string    `json:"id"`
+	FamilyID       string    `json:"familyId"`
+	Name           string    `json:"name"`
+	Role           string    `json:"role"`
+	IsAdmin        bool      `json:"isAdmin"`
+	NeedsAttention bool      `json:"needsAttention"`
+	Color          string    `json:"color"`
+	CreatedAt      time.Time `json:"createdAt"`
 }
 
 type Update struct {

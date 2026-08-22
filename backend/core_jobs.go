@@ -404,24 +404,61 @@ func (s *store) listNotifications(ctx context.Context, familyID, memberID string
 	return notifications, rows.Err()
 }
 
-func (s *store) createBroadcastNotifications(ctx context.Context, familyID, title, message, actionURL string, now time.Time) (int, error) {
-	members, err := s.listMembers(ctx, familyID)
+func (s *store) createBroadcastNotifications(ctx context.Context, familyID, title, message, actionURL string, markNeedsAttention bool, now time.Time) (int, int, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
+	}
+	defer tx.Rollback()
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM members WHERE family_id = ? ORDER BY created_at`, familyID)
+	if err != nil {
+		return 0, 0, err
+	}
+	memberIDs := make([]string, 0)
+	for rows.Next() {
+		var memberID string
+		if err := rows.Scan(&memberID); err != nil {
+			rows.Close()
+			return 0, 0, err
+		}
+		memberIDs = append(memberIDs, memberID)
+	}
+	if err := rows.Close(); err != nil {
+		return 0, 0, err
+	}
+	if err := rows.Err(); err != nil {
+		return 0, 0, err
+	}
+	marked := 0
+	if markNeedsAttention {
+		for _, memberID := range memberIDs {
+			if _, err := tx.ExecContext(ctx, `UPDATE members SET needs_attention = 1 WHERE id = ?`, memberID); err != nil {
+				return 0, 0, err
+			}
+			if err := appendAudit(ctx, tx, "member.attention_changed", "member", memberID, map[string]any{
+				"needsAttention": true, "source": "demo_broadcast",
+			}, now); err != nil {
+				return 0, 0, err
+			}
+			marked++
+		}
 	}
 	incidentKey := "broadcast:" + newID()
 	created := 0
-	for _, member := range members {
-		res, err := s.db.ExecContext(ctx, `INSERT INTO notifications(id, family_id, recipient_member_id, subject_member_id, type, title, message, action_url, incident_key, created_at)
-			VALUES(?, ?, ?, ?, 'demo_broadcast', ?, ?, ?, ?, ?)`, newID(), familyID, member.ID, member.ID, title, message, actionURL, incidentKey, now.UTC().Format(time.RFC3339Nano))
+	for _, memberID := range memberIDs {
+		res, err := tx.ExecContext(ctx, `INSERT INTO notifications(id, family_id, recipient_member_id, subject_member_id, type, title, message, action_url, incident_key, created_at)
+			VALUES(?, ?, ?, ?, 'demo_broadcast', ?, ?, ?, ?, ?)`, newID(), familyID, memberID, memberID, title, message, actionURL, incidentKey, now.UTC().Format(time.RFC3339Nano))
 		if err != nil {
-			return created, err
+			return 0, 0, err
 		}
 		if rows, _ := res.RowsAffected(); rows == 1 {
 			created++
 		}
 	}
-	return created, nil
+	if err := tx.Commit(); err != nil {
+		return 0, 0, err
+	}
+	return created, marked, nil
 }
 
 func (s *store) markNotificationRead(ctx context.Context, familyID, memberID, notificationID string, readAt time.Time) error {
@@ -500,10 +537,11 @@ func (a *app) adminRunCoreJobs(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) adminBroadcastNotification(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		FamilyID  string `json:"familyId"`
-		Title     string `json:"title"`
-		Message   string `json:"message"`
-		ActionURL string `json:"actionUrl"`
+		FamilyID           string `json:"familyId"`
+		Title              string `json:"title"`
+		Message            string `json:"message"`
+		ActionURL          string `json:"actionUrl"`
+		MarkNeedsAttention bool   `json:"markNeedsAttention"`
 	}
 	if err := readJSON(r, &input); err != nil {
 		writeError(w, http.StatusBadRequest, "通知格式不正确")
@@ -521,12 +559,12 @@ func (a *app) adminBroadcastNotification(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "通知标题、内容或 HTTPS 链接不正确")
 		return
 	}
-	created, err := a.store.createBroadcastNotifications(r.Context(), input.FamilyID, input.Title, input.Message, input.ActionURL, time.Now().UTC())
+	created, marked, err := a.store.createBroadcastNotifications(r.Context(), input.FamilyID, input.Title, input.Message, input.ActionURL, input.MarkNeedsAttention, time.Now().UTC())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "暂时无法创建家庭通知")
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"notificationsCreated": created})
+	writeJSON(w, http.StatusCreated, map[string]any{"notificationsCreated": created, "membersMarkedForAttention": marked})
 }
 
 func (a *app) listMemberNotifications(w http.ResponseWriter, r *http.Request) {

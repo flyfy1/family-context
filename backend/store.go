@@ -114,6 +114,7 @@ CREATE TABLE IF NOT EXISTS members (
   name TEXT NOT NULL,
   role TEXT NOT NULL,
   is_admin INTEGER NOT NULL DEFAULT 0,
+  needs_attention INTEGER NOT NULL DEFAULT 0,
   color TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
@@ -217,6 +218,15 @@ CREATE INDEX IF NOT EXISTS idx_bedtime_stories_child_created ON bedtime_stories(
 	if hasAdminColumn == 0 {
 		_, err = s.db.ExecContext(ctx, `ALTER TABLE members ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0`)
 		if err != nil {
+			return err
+		}
+	}
+	var hasAttentionColumn int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('members') WHERE name = 'needs_attention'`).Scan(&hasAttentionColumn); err != nil {
+		return err
+	}
+	if hasAttentionColumn == 0 {
+		if _, err := s.db.ExecContext(ctx, `ALTER TABLE members ADD COLUMN needs_attention INTEGER NOT NULL DEFAULT 0`); err != nil {
 			return err
 		}
 	}
