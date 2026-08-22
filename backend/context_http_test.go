@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -209,6 +210,9 @@ func TestDevelopmentCORSAllowsVite(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNoContent || resp.Header.Get("Access-Control-Allow-Origin") != "http://localhost:5173" {
 		t.Fatalf("unexpected CORS response: status=%d origin=%q", resp.StatusCode, resp.Header.Get("Access-Control-Allow-Origin"))
+	}
+	if !strings.Contains(resp.Header.Get("Access-Control-Allow-Headers"), "X-Member-ID") {
+		t.Fatalf("member identity header missing from CORS response: %q", resp.Header.Get("Access-Control-Allow-Headers"))
 	}
 }
 
