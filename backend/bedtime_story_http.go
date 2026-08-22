@@ -121,6 +121,7 @@ func (a *app) synthesizeBedtimeStoryAudio(r *http.Request, story BedtimeStory) (
 		story.ErrorMessage = "故事文本已保存；Gemini 暂时无法生成音频"
 	} else {
 		story.Status = "ready"
+		story.ErrorMessage = ""
 		audioFile = story.ID + ".wav"
 		if err := writeFileAtomically(filepath.Join(a.spacesRoot, "shared", "stories"), audioFile, wav); err != nil {
 			story.Status = "audio_failed"
