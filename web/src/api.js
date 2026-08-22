@@ -10,6 +10,12 @@ export function isUnauthorized(error) {
   return error instanceof APIError && error.status === 401;
 }
 
+export function logoutOnUnauthorized(error, logout) {
+  if (!isUnauthorized(error)) return false;
+  logout();
+  return true;
+}
+
 export function createAPI(config) {
   return async (path, options = {}) => {
     const { admin = false, ...fetchOptions } = options;

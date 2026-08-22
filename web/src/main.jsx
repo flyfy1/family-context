@@ -5,7 +5,7 @@ import LandingPage from "./LandingPage";
 import { CoreJobSettings, NotificationInbox } from "./coreJobs";
 import MemberRoleEditor from "./MemberRoleEditor";
 import ActivityThreads from "./ActivityThreads";
-import { createAPI, isUnauthorized } from "./api";
+import { createAPI, logoutOnUnauthorized } from "./api";
 
 const FAMILY_ID = "our-family";
 const ROUTES = ["/", "/feed", "/space", "/elder", "/settings"];
@@ -73,8 +73,7 @@ function App() {
       })
       .catch(err => {
         if (!active) return;
-        if (isUnauthorized(err)) clearSession();
-        else setError(err.message);
+        if (!logoutOnUnauthorized(err, clearSession)) setError(err.message);
       })
       .finally(() => active && setLoading(false));
     return () => { active = false; };

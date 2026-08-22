@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { APIError, createAPI, isUnauthorized } from "./api.js";
+import { APIError, createAPI, isUnauthorized, logoutOnUnauthorized } from "./api.js";
 
 test("authenticated 401 responses are identifiable as logout conditions", async () => {
   const originalFetch = globalThis.fetch;
@@ -23,7 +23,13 @@ test("authenticated 401 responses are identifiable as logout conditions", async 
   }
 });
 
-test("other failures remain connection errors instead of logout conditions", () => {
-  assert.equal(isUnauthorized(new APIError("Request failed (503)", 503)), false);
-  assert.equal(isUnauthorized(new Error("Request failed (401)")), false);
+test("401 invokes logout while other failures remain connection errors", () => {
+  let logoutCount = 0;
+  const logout = () => { logoutCount += 1; };
+
+  assert.equal(logoutOnUnauthorized(new APIError("Request failed (401)", 401), logout), true);
+  assert.equal(logoutCount, 1);
+  assert.equal(logoutOnUnauthorized(new APIError("Request failed (503)", 503), logout), false);
+  assert.equal(logoutOnUnauthorized(new Error("Request failed (401)"), logout), false);
+  assert.equal(logoutCount, 1);
 });
