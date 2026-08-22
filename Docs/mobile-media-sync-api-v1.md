@@ -10,7 +10,7 @@
     ↓ 成员 Bearer Token
 先保存到该成员的私人 Space
     ↓
-Gemini 内容分析 + 分享建议
+Gemini 内容分析 + 分享对象建议
     ↓
 review/manual：等待成员确认
 auto：仅在成员明确配置 Prompt 且 AI 建议安全分享时发布
@@ -20,12 +20,12 @@ auto：仅在成员明确配置 Prompt 且 AI 建议安全分享时发布
 
 上传不是“直接发动态”。原始媒体始终先成为 `MediaImport`，默认 `shareDecision=pending`。AI 失败不会回滚或删除本地原件。
 
-V1 的分享对象只有：
+V1 的实际访问范围仍然只有：
 
 - `private`：仅成员自己；
 - `family`：整个家庭。
 
-“只分享给爸爸和妈妈”等成员级收件人 ACL 不在本版权限模型内。
+Gemini 可以从服务端提供的真实家庭成员名单中给出 `suggestedRecipients`，用于回答“建议分享给谁”。这只是审核建议，不会授予访问权限。因为成员级 ACL 尚未实现，“只分享给爸爸和妈妈”不能直接发布；如果建议对象少于整个家庭，即使 `shareMode=auto` 也会保持 `pending`，等待成员处理。
 
 ## 2. 鉴权
 
@@ -115,6 +115,11 @@ curl -X POST "$API_BASE/api/v1/me/media-imports" \
     "activities": ["骑自行车"],
     "containsSensitive": false,
     "suggestedVisibility": "family",
+    "suggestedRecipients": [
+      {"memberId": "...", "name": "爷爷"},
+      {"memberId": "...", "name": "奶奶"}
+    ],
+    "recipientReason": "祖辈可能会关心孩子学会的新活动",
     "reason": "符合成员配置的普通家庭活动分享规则"
   },
   "shareDecision": "pending",
@@ -150,7 +155,7 @@ Content-Type: application/json
 
 {
   "shareMode": "review",
-  "sharePrompt": "普通家庭活动可以分享；证件、医疗资料和精确地址不要分享。"
+  "sharePrompt": "孩子的新活动可以建议分享给爷爷奶奶；工作截图、证件、医疗资料和精确地址不要分享。"
 }
 ```
 
@@ -158,9 +163,9 @@ Content-Type: application/json
 |---|---|
 | `manual` | AI 可以根据已保存的 Prompt 给建议，但绝不自动发布；成员手动分享 |
 | `review` | AI 根据 Prompt 给建议，但始终等待成员确认 |
-| `auto` | 仅当 Prompt 非空、AI 建议 `family` 且 `containsSensitive=false` 时自动生成家庭 Update |
+| `auto` | 仅当 Prompt 非空、内容不敏感、AI 建议 `family`，并且建议对象覆盖除上传者外的全部家庭成员时，才自动生成家庭 Update；部分成员建议保持待确认 |
 
-无论 Prompt 写了什么，它都不能跨越成员令牌和文件目录权限。AI 也被要求不做人脸身份识别、不猜测姓名或敏感属性。
+无论 Prompt 写了什么，它都不能跨越成员令牌和文件目录权限。AI 只能返回候选名单中的成员 ID；后端会删除不存在、重复或跨家庭的 ID，并用本地成员记录覆盖模型返回的姓名。AI 也被要求不做人脸身份识别、不猜测姓名或敏感属性。敏感内容、没有有效收件人或无法判断时，结果会降级为 `private` 和空收件人列表。
 
 ## 7. 确认保留或分享
 

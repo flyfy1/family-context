@@ -109,6 +109,7 @@ func (a *app) memberCreateMediaImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	settings, settingsErr := a.store.getMemberSettings(r.Context(), member.ID)
+	var recipientCandidates []Member
 	if settingsErr != nil {
 		item.AnalysisStatus = "failed"
 		item.AnalysisError = "暂时无法读取分享策略"
@@ -116,13 +117,25 @@ func (a *app) memberCreateMediaImport(w http.ResponseWriter, r *http.Request) {
 		item.AnalysisStatus = "skipped_too_large"
 		item.AnalysisError = "媒体已安全保存；当前版本只自动分析 14MB 以内的文件"
 	} else {
-		analysis, analyzeErr := a.mediaAI.AnalyzeMedia(r.Context(), data, mimeType, settings.SharePrompt)
-		if analyzeErr != nil {
+		members, membersErr := a.store.listMembers(r.Context(), member.FamilyID)
+		if membersErr != nil {
 			item.AnalysisStatus = "failed"
-			item.AnalysisError = "媒体已安全保存；AI 暂时无法完成分析"
+			item.AnalysisError = "媒体已安全保存；暂时无法读取家庭收件人"
 		} else {
-			item.AnalysisStatus = "ready"
-			item.Analysis = &analysis
+			for _, candidate := range members {
+				if candidate.ID != member.ID {
+					recipientCandidates = append(recipientCandidates, candidate)
+				}
+			}
+			analysis, analyzeErr := a.mediaAI.AnalyzeMedia(r.Context(), data, mimeType, settings.SharePrompt, recipientCandidates)
+			if analyzeErr != nil {
+				item.AnalysisStatus = "failed"
+				item.AnalysisError = "媒体已安全保存；AI 暂时无法完成分析"
+			} else {
+				analysis = validateMediaRecipientSuggestions(analysis, recipientCandidates)
+				item.AnalysisStatus = "ready"
+				item.Analysis = &analysis
+			}
 		}
 	}
 	item.UpdatedAt = time.Now().UTC()
@@ -134,12 +147,51 @@ func (a *app) memberCreateMediaImport(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "分析已保存到索引，但暂时无法写入导入元数据")
 		return
 	}
-	if settingsErr == nil && settings.ShareMode == "auto" && item.Analysis != nil && !item.Analysis.ContainsSensitive && item.Analysis.SuggestedVisibility == "family" {
+	if settingsErr == nil && settings.ShareMode == "auto" && item.Analysis != nil && !item.Analysis.ContainsSensitive && item.Analysis.SuggestedVisibility == "family" && suggestionsCoverCandidates(item.Analysis.SuggestedRecipients, recipientCandidates) {
 		if shared, err := a.shareMediaImport(r, item, item.Analysis.SuggestedCaption, mediaFile); err == nil {
 			item = shared
 		}
 	}
 	writeJSON(w, http.StatusCreated, item)
+}
+
+func validateMediaRecipientSuggestions(analysis MediaAnalysis, candidates []Member) MediaAnalysis {
+	allowed := make(map[string]Member, len(candidates))
+	for _, candidate := range candidates {
+		allowed[candidate.ID] = candidate
+	}
+	seen := make(map[string]bool, len(analysis.SuggestedRecipients))
+	validated := make([]MediaShareRecipient, 0, len(analysis.SuggestedRecipients))
+	for _, suggestion := range analysis.SuggestedRecipients {
+		candidate, ok := allowed[strings.TrimSpace(suggestion.MemberID)]
+		if !ok || seen[candidate.ID] {
+			continue
+		}
+		seen[candidate.ID] = true
+		validated = append(validated, MediaShareRecipient{MemberID: candidate.ID, Name: candidate.Name})
+	}
+	analysis.SuggestedRecipients = validated
+	if analysis.ContainsSensitive || analysis.SuggestedVisibility != "family" || len(validated) == 0 {
+		analysis.SuggestedVisibility = "private"
+		analysis.SuggestedRecipients = []MediaShareRecipient{}
+	}
+	return analysis
+}
+
+func suggestionsCoverCandidates(suggestions []MediaShareRecipient, candidates []Member) bool {
+	if len(candidates) == 0 || len(suggestions) != len(candidates) {
+		return false
+	}
+	wanted := make(map[string]bool, len(candidates))
+	for _, candidate := range candidates {
+		wanted[candidate.ID] = true
+	}
+	for _, suggestion := range suggestions {
+		if !wanted[suggestion.MemberID] {
+			return false
+		}
+	}
+	return true
 }
 
 func (a *app) memberListMediaImports(w http.ResponseWriter, r *http.Request) {

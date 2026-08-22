@@ -27,7 +27,7 @@ type sharePolicyEvaluator interface {
 }
 
 type mediaAnalyzer interface {
-	AnalyzeMedia(ctx context.Context, media []byte, mimeType, sharePrompt string) (MediaAnalysis, error)
+	AnalyzeMedia(ctx context.Context, media []byte, mimeType, sharePrompt string, recipientCandidates []Member) (MediaAnalysis, error)
 }
 
 type ShareDecision struct {
@@ -67,7 +67,7 @@ func (stubAudioProcessor) EvaluateShare(_ context.Context, _ string, prompt stri
 	return ShareDecision{Allowed: strings.TrimSpace(prompt) != "", Reason: "stub policy evaluation"}, nil
 }
 
-func (stubAudioProcessor) AnalyzeMedia(_ context.Context, _ []byte, mimeType, sharePrompt string) (MediaAnalysis, error) {
+func (stubAudioProcessor) AnalyzeMedia(_ context.Context, _ []byte, mimeType, sharePrompt string, recipientCandidates []Member) (MediaAnalysis, error) {
 	mediaType := "照片"
 	if strings.HasPrefix(mimeType, "video/") {
 		mediaType = "视频"
@@ -76,16 +76,38 @@ func (stubAudioProcessor) AnalyzeMedia(_ context.Context, _ []byte, mimeType, sh
 	if strings.TrimSpace(sharePrompt) != "" {
 		visibility = "family"
 	}
+	recipients := make([]MediaShareRecipient, 0, len(recipientCandidates))
+	if visibility == "family" {
+		for _, member := range recipientCandidates {
+			recipients = append(recipients, MediaShareRecipient{MemberID: member.ID, Name: member.Name})
+		}
+	}
 	return MediaAnalysis{Summary: "记录了一段家庭生活" + mediaType + "。", SuggestedCaption: "今天的生活片段", Activities: []string{"家庭生活"},
-		SuggestedVisibility: visibility, Reason: "stub media analysis"}, nil
+		SuggestedVisibility: visibility, SuggestedRecipients: recipients, RecipientReason: "stub recipient suggestion", Reason: "stub media analysis"}, nil
 }
 
-func (g *geminiAudioProcessor) AnalyzeMedia(ctx context.Context, media []byte, mimeType, sharePrompt string) (MediaAnalysis, error) {
+func (g *geminiAudioProcessor) AnalyzeMedia(ctx context.Context, media []byte, mimeType, sharePrompt string, recipientCandidates []Member) (MediaAnalysis, error) {
 	inputType := "image"
 	if strings.HasPrefix(mimeType, "video/") {
 		inputType = "video"
 	}
-	prompt := `分析这段家庭私人媒体，并输出简体中文 JSON。忠于可观察内容，不识别人脸身份，不推断姓名、健康、种族、宗教、政治、精确住址等敏感属性。people 只能用概括描述（例如“两位成年人和一个孩子”）。summary 和 suggestedCaption 要自然简短；activities 是可观察活动。containsSensitive 在出现证件、医疗资料、裸露、精确地址等不适合默认家庭分享的内容时为 true。根据成员的分享规则给出 suggestedVisibility（private 或 family）；规则没有明确允许，或内容敏感时必须 private。\n\n成员分享规则：\n` + strings.TrimSpace(sharePrompt)
+	candidates := make([]map[string]string, 0, len(recipientCandidates))
+	for _, member := range recipientCandidates {
+		candidates = append(candidates, map[string]string{"memberId": member.ID, "name": member.Name, "role": member.Role})
+	}
+	candidatesJSON, err := json.Marshal(candidates)
+	if err != nil {
+		return MediaAnalysis{}, err
+	}
+	prompt := `分析这段家庭私人媒体，并输出简体中文 JSON。忠于可观察内容，不识别人脸身份，不推断姓名、健康、种族、宗教、政治、精确住址等敏感属性。people 只能用概括描述（例如“两位成年人和一个孩子”）。summary 和 suggestedCaption 要自然简短；activities 是可观察活动。containsSensitive 在出现证件、医疗资料、裸露、精确地址等不适合默认家庭分享的内容时为 true。
+
+根据成员的分享规则判断 suggestedVisibility（private 或 family），并从服务端给出的候选家庭成员中选择 suggestedRecipients。只能复制候选列表里的 memberId，不能创造成员、识别人脸或推断图片中的人物是谁。recipientReason 简短解释为什么这些家庭成员可能关心。规则没有明确允许、内容敏感、无法判断或没有合适收件人时，必须返回 private 和空收件人列表。你的结果只是建议，不会授予访问权限或执行分享。
+
+成员分享规则：
+` + strings.TrimSpace(sharePrompt) + `
+
+候选家庭成员 JSON：
+` + string(candidatesJSON)
 	payload := map[string]any{
 		"model": g.model, "store": false,
 		"input": []any{
@@ -97,8 +119,9 @@ func (g *geminiAudioProcessor) AnalyzeMedia(ctx context.Context, media []byte, m
 				"summary": map[string]any{"type": "string"}, "suggestedCaption": map[string]any{"type": "string"},
 				"people": map[string]any{"type": "string"}, "activities": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 				"containsSensitive": map[string]any{"type": "boolean"}, "suggestedVisibility": map[string]any{"type": "string", "enum": []string{"private", "family"}},
-				"reason": map[string]any{"type": "string"},
-			}, "required": []string{"summary", "suggestedCaption", "activities", "containsSensitive", "suggestedVisibility", "reason"},
+				"suggestedRecipients": map[string]any{"type": "array", "items": map[string]any{"type": "object", "properties": map[string]any{"memberId": map[string]any{"type": "string"}}, "required": []string{"memberId"}}},
+				"recipientReason":     map[string]any{"type": "string"}, "reason": map[string]any{"type": "string"},
+			}, "required": []string{"summary", "suggestedCaption", "activities", "containsSensitive", "suggestedVisibility", "suggestedRecipients", "recipientReason", "reason"},
 		}}},
 	}
 	body, err := json.Marshal(payload)
@@ -136,7 +159,7 @@ func (g *geminiAudioProcessor) AnalyzeMedia(ctx context.Context, media []byte, m
 			if err := json.Unmarshal([]byte(content.Text), &analysis); err != nil {
 				continue
 			}
-			if analysis.Summary != "" && analysis.SuggestedCaption != "" && validVisibility(analysis.SuggestedVisibility) && analysis.Reason != "" {
+			if analysis.Summary != "" && analysis.SuggestedCaption != "" && validVisibility(analysis.SuggestedVisibility) && analysis.RecipientReason != "" && analysis.Reason != "" {
 				return analysis, nil
 			}
 		}

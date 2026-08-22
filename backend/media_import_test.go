@@ -21,11 +21,33 @@ type testMediaProcessor struct {
 	err      error
 }
 
-func (p testMediaProcessor) AnalyzeMedia(_ context.Context, _ []byte, _ string, _ string) (MediaAnalysis, error) {
+type selectiveMediaProcessor struct{ stubAudioProcessor }
+
+func (selectiveMediaProcessor) AnalyzeMedia(_ context.Context, _ []byte, _ string, _ string, candidates []Member) (MediaAnalysis, error) {
+	analysis := MediaAnalysis{Summary: "孩子在画画。", SuggestedCaption: "今天的新作品", Activities: []string{"画画"},
+		SuggestedVisibility: "family", RecipientReason: "爷爷喜欢看孩子的作品", Reason: "符合成员规则"}
+	for _, candidate := range candidates {
+		if candidate.Name == "爷爷" {
+			analysis.SuggestedRecipients = []MediaShareRecipient{{MemberID: candidate.ID}}
+		}
+	}
+	return analysis, nil
+}
+
+func (p testMediaProcessor) AnalyzeMedia(_ context.Context, _ []byte, _ string, _ string, candidates []Member) (MediaAnalysis, error) {
 	if p.err != nil {
 		return MediaAnalysis{}, p.err
 	}
-	return p.analysis, nil
+	analysis := p.analysis
+	if analysis.RecipientReason == "" {
+		analysis.RecipientReason = "符合成员指定的收件人规则"
+	}
+	if analysis.SuggestedVisibility == "family" && analysis.SuggestedRecipients == nil {
+		for _, candidate := range candidates {
+			analysis.SuggestedRecipients = append(analysis.SuggestedRecipients, MediaShareRecipient{MemberID: candidate.ID})
+		}
+	}
+	return analysis, nil
 }
 
 func TestMediaImportReviewIsolationAndShare(t *testing.T) {
@@ -54,6 +76,9 @@ func TestMediaImportReviewIsolationAndShare(t *testing.T) {
 	item := uploadTestMediaImport(t, server, first.AccessToken, "ride.png", "image/png", []byte("\x89PNG\r\n\x1a\nprivate image"))
 	if item.AnalysisStatus != "ready" || item.Analysis == nil || item.Analysis.SuggestedVisibility != "family" || item.ShareDecision != "pending" || item.UpdateID != "" {
 		t.Fatalf("unexpected review import: %+v", item)
+	}
+	if len(item.Analysis.SuggestedRecipients) != 1 || item.Analysis.SuggestedRecipients[0].MemberID != second.Member.ID || item.Analysis.SuggestedRecipients[0].Name != second.Member.Name {
+		t.Fatalf("recipient suggestion was not resolved to the real family member: %+v", item.Analysis.SuggestedRecipients)
 	}
 	repeated := uploadTestMediaImport(t, server, first.AccessToken, "ride.png", "image/png", []byte("\x89PNG\r\n\x1a\ndifferent retry body"))
 	if repeated.ID != item.ID || repeated.SHA256 != item.SHA256 {
@@ -109,10 +134,32 @@ func TestMediaImportAutoShareAndFailureStayLocal(t *testing.T) {
 		server := httptest.NewServer(newApp(store, processor, filepath.Join(temp, "media"), "admin-token").routes())
 		t.Cleanup(server.Close)
 		credential := createTestMemberCredential(t, server, "奶奶")
+		_ = createTestMemberCredential(t, server, "爷爷")
 		requestMemberJSON[MemberSettings](t, server.Client(), http.MethodPut, server.URL+"/api/v1/me/share-policy", map[string]string{"shareMode": "auto", "sharePrompt": "普通家庭活动可以自动分享。"}, credential.AccessToken, http.StatusOK)
 		item := uploadTestMediaImport(t, server, credential.AccessToken, "dinner.mp4", "video/mp4", []byte("small video"))
 		if item.MediaType != "video" || item.ShareDecision != "family" || item.UpdateID == "" {
 			t.Fatalf("auto share failed: %+v", item)
+		}
+	})
+
+	t.Run("recipient subset never becomes whole-family auto share", func(t *testing.T) {
+		temp := t.TempDir()
+		store, err := openStore(filepath.Join(temp, "test.db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { store.Close() })
+		server := httptest.NewServer(newApp(store, selectiveMediaProcessor{}, filepath.Join(temp, "media"), "admin-token").routes())
+		t.Cleanup(server.Close)
+		credential := createTestMemberCredential(t, server, "妈妈")
+		grandpa := createTestMemberCredential(t, server, "爷爷")
+		_ = createTestMemberCredential(t, server, "奶奶")
+		requestMemberJSON[MemberSettings](t, server.Client(), http.MethodPut, server.URL+"/api/v1/me/share-policy", map[string]string{
+			"shareMode": "auto", "sharePrompt": "孩子的作品只建议分享给爷爷。",
+		}, credential.AccessToken, http.StatusOK)
+		item := uploadTestMediaImport(t, server, credential.AccessToken, "drawing.png", "image/png", []byte("\x89PNG\r\n\x1a\nprivate drawing"))
+		if item.ShareDecision != "pending" || item.UpdateID != "" || item.Analysis == nil || len(item.Analysis.SuggestedRecipients) != 1 || item.Analysis.SuggestedRecipients[0].MemberID != grandpa.Member.ID {
+			t.Fatalf("subset suggestion was incorrectly auto-shared: %+v", item)
 		}
 	})
 
@@ -134,6 +181,24 @@ func TestMediaImportAutoShareAndFailureStayLocal(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+}
+
+func TestValidateMediaRecipientSuggestionsFailsClosed(t *testing.T) {
+	candidates := []Member{{ID: "grandpa", Name: "爷爷"}, {ID: "grandma", Name: "奶奶"}}
+	analysis := validateMediaRecipientSuggestions(MediaAnalysis{
+		SuggestedVisibility: "family",
+		SuggestedRecipients: []MediaShareRecipient{{MemberID: "grandpa", Name: "伪造姓名"}, {MemberID: "stranger", Name: "陌生人"}, {MemberID: "grandpa"}},
+	}, candidates)
+	if len(analysis.SuggestedRecipients) != 1 || analysis.SuggestedRecipients[0] != (MediaShareRecipient{MemberID: "grandpa", Name: "爷爷"}) {
+		t.Fatalf("invalid recipients were not removed: %+v", analysis.SuggestedRecipients)
+	}
+
+	sensitive := validateMediaRecipientSuggestions(MediaAnalysis{
+		ContainsSensitive: true, SuggestedVisibility: "family", SuggestedRecipients: []MediaShareRecipient{{MemberID: "grandpa"}},
+	}, candidates)
+	if sensitive.SuggestedVisibility != "private" || len(sensitive.SuggestedRecipients) != 0 {
+		t.Fatalf("sensitive media did not fail closed: %+v", sensitive)
+	}
 }
 
 func createTestMemberCredential(t *testing.T, server *httptest.Server, name string) MemberCredential {

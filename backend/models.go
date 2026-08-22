@@ -97,13 +97,20 @@ type MemberCredential struct {
 }
 
 type MediaAnalysis struct {
-	Summary             string   `json:"summary"`
-	SuggestedCaption    string   `json:"suggestedCaption"`
-	People              string   `json:"people,omitempty"`
-	Activities          []string `json:"activities"`
-	ContainsSensitive   bool     `json:"containsSensitive"`
-	SuggestedVisibility string   `json:"suggestedVisibility"`
-	Reason              string   `json:"reason"`
+	Summary             string                `json:"summary"`
+	SuggestedCaption    string                `json:"suggestedCaption"`
+	People              string                `json:"people,omitempty"`
+	Activities          []string              `json:"activities"`
+	ContainsSensitive   bool                  `json:"containsSensitive"`
+	SuggestedVisibility string                `json:"suggestedVisibility"`
+	SuggestedRecipients []MediaShareRecipient `json:"suggestedRecipients"`
+	RecipientReason     string                `json:"recipientReason"`
+	Reason              string                `json:"reason"`
+}
+
+type MediaShareRecipient struct {
+	MemberID string `json:"memberId"`
+	Name     string `json:"name"`
 }
 
 type MediaImport struct {

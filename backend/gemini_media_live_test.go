@@ -42,11 +42,11 @@ func TestGeminiMediaAnalysisLive(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	analysis, err := analyzer.AnalyzeMedia(ctx, media.Bytes(), "image/png", "普通、无敏感信息的家庭图片可以分享。")
+	analysis, err := analyzer.AnalyzeMedia(ctx, media.Bytes(), "image/png", "普通、无敏感信息的家庭图片可以分享给爷爷。", []Member{{ID: "grandpa", Name: "爷爷", Role: "member"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if analysis.Summary == "" || analysis.SuggestedCaption == "" || !validVisibility(analysis.SuggestedVisibility) || analysis.Reason == "" {
+	if analysis.Summary == "" || analysis.SuggestedCaption == "" || !validVisibility(analysis.SuggestedVisibility) || analysis.RecipientReason == "" || analysis.Reason == "" {
 		t.Fatalf("incomplete analysis: %+v", analysis)
 	}
 }
