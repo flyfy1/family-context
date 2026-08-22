@@ -63,6 +63,7 @@ public class MainActivity extends android.app.Activity {
     private File recordingFile;
     private JSONObject pendingRecordQuestion;
     private String language;
+    private MemberSessionSettings.Session session;
     private MemberProfileSettings.Profile profile;
     private JSONArray familyMembers = new JSONArray();
     private Button profileButton;
@@ -77,7 +78,12 @@ public class MainActivity extends android.app.Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         language = LanguageSettings.get(this);
-        profile = MemberProfileSettings.get(this);
+        session = MemberSessionSettings.get(this);
+        if (!session.isAuthenticated()) {
+            setContentView(buildLoginScreen());
+            return;
+        }
+        profile = session.profile();
         setContentView(buildScreen());
         loadMembers();
         if (MemberProfileSettings.ELDER.equals(profile.role)) loadDailySummary();
@@ -89,6 +95,7 @@ public class MainActivity extends android.app.Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (session == null || !session.isAuthenticated()) return;
         refreshPhotoSyncStatus();
         if (PhotoSync.preferences(this).getBoolean(PhotoSync.KEY_ENABLED, false)
                 && PhotoSync.isConfigured(this) && PhotoSync.hasImageAccess(this)) {
@@ -143,9 +150,14 @@ public class MainActivity extends android.app.Activity {
         profileIntro.setPadding(0, dp(8), 0, dp(8));
         languageCard.addView(profileIntro);
         profileButton = secondaryButton(profileLabel(profile));
-        profileButton.setContentDescription(tr("Choose family profile", "选择家庭身份"));
-        profileButton.setOnClickListener(v -> showProfileSettings());
+        profileButton.setContentDescription(tr("Signed-in family member", "当前登录的家庭成员"));
+        profileButton.setEnabled(false);
         languageCard.addView(profileButton, fullWidth());
+        Button logoutButton = secondaryButton(tr("Sign out", "退出登录"));
+        LinearLayout.LayoutParams logoutParams = fullWidth();
+        logoutParams.setMargins(0, dp(8), 0, 0);
+        logoutButton.setOnClickListener(v -> signOut());
+        languageCard.addView(logoutButton, logoutParams);
         TextView languageIntro = text(tr("Language", "语言"), 13, COLOR_MUTED);
         languageIntro.setPadding(0, dp(8), 0, dp(8));
         languageCard.addView(languageIntro);
@@ -226,6 +238,100 @@ public class MainActivity extends android.app.Activity {
         return scroll;
     }
 
+    private View buildLoginScreen() {
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.setBackgroundColor(COLOR_BACKGROUND);
+        LinearLayout root = vertical();
+        root.setGravity(Gravity.CENTER_VERTICAL);
+        root.setPadding(dp(24), dp(48), dp(24), dp(48));
+        scroll.addView(root, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        root.addView(text("FAMILY DAILY", 13, COLOR_PRIMARY));
+        TextView title = text(tr("Sign in as yourself", "用你自己的身份登录"), 30, COLOR_TEXT);
+        title.setPadding(0, dp(8), 0, dp(8));
+        root.addView(title);
+        TextView intro = text(tr("Each family member has a personal username and password. Your identity stays fixed until you sign out.", "每位家庭成员都有自己的用户名和密码；退出登录前，身份会保持固定。"), 16, COLOR_MUTED);
+        intro.setLineSpacing(0, 1.25f);
+        root.addView(intro);
+
+        LinearLayout card = card();
+        card.setPadding(dp(18), dp(20), dp(18), dp(20));
+        LinearLayout.LayoutParams cardParams = fullWidth();
+        cardParams.setMargins(0, dp(24), 0, 0);
+        root.addView(card, cardParams);
+        EditText username = new EditText(this);
+        username.setHint(tr("Username", "用户名"));
+        username.setSingleLine(true);
+        username.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+        card.addView(username, fullWidth());
+        EditText password = new EditText(this);
+        password.setHint(tr("Password", "密码"));
+        password.setSingleLine(true);
+        password.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        LinearLayout.LayoutParams passwordParams = fullWidth();
+        passwordParams.setMargins(0, dp(8), 0, dp(12));
+        card.addView(password, passwordParams);
+        TextView loginStatus = text("", 14, COLOR_MUTED);
+        loginStatus.setVisibility(View.GONE);
+        Button loginButton = primaryButton(tr("Sign in", "登录"));
+        loginButton.setOnClickListener(v -> signIn(username, password, loginButton, loginStatus));
+        card.addView(loginButton, fullWidth());
+        card.addView(loginStatus, fullWidth());
+        return scroll;
+    }
+
+    private void signIn(EditText username, EditText password, Button button, TextView loginStatus) {
+        String usernameValue = username.getText().toString().trim();
+        String passwordValue = password.getText().toString();
+        if (usernameValue.isEmpty() || passwordValue.isEmpty()) {
+            loginStatus.setText(tr("Enter your username and password", "请输入用户名和密码"));
+            loginStatus.setVisibility(View.VISIBLE);
+            return;
+        }
+        button.setEnabled(false);
+        loginStatus.setText(tr("Signing in…", "正在登录……"));
+        loginStatus.setVisibility(View.VISIBLE);
+        executor.execute(() -> {
+            try {
+                HttpURLConnection connection = openPublicConnection("POST", "/api/v1/auth/login");
+                connection.setDoOutput(true);
+                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                JSONObject input = new JSONObject().put("username", usernameValue).put("password", passwordValue);
+                try (OutputStream output = connection.getOutputStream()) {
+                    output.write(input.toString().getBytes(StandardCharsets.UTF_8));
+                }
+                JSONObject credential = new JSONObject(readResponse(connection));
+                JSONObject member = credential.getJSONObject("member");
+                MemberSessionSettings.save(this, credential.getString("accessToken"), credential.optString("expiresAt"),
+                        member.getString("id"), member.getString("name"), member.optString("role", MemberProfileSettings.MEMBER));
+                android.content.SharedPreferences photoPrefs = PhotoSync.preferences(this);
+                if (photoPrefs.getString(PhotoSync.KEY_BASE_URL, "").trim().isEmpty()) {
+                    photoPrefs.edit().putString(PhotoSync.KEY_BASE_URL, MediaUploadClient.trimTrailingSlash(BuildConfig.API_BASE_URL)).apply();
+                }
+                runOnUiThread(this::recreate);
+            } catch (Exception error) {
+                runOnUiThread(() -> {
+                    button.setEnabled(true);
+                    loginStatus.setText(error.getMessage());
+                    loginStatus.setVisibility(View.VISIBLE);
+                });
+            }
+        });
+    }
+
+    private void signOut() {
+        executor.execute(() -> {
+            try {
+                request("POST", "/api/v1/auth/logout", new JSONObject());
+            } catch (Exception ignored) {
+            }
+            MemberSessionSettings.clear(this);
+            PhotoSync.preferences(this).edit().putBoolean(PhotoSync.KEY_ENABLED, false).apply();
+            runOnUiThread(this::recreate);
+        });
+    }
+
     private void addStatusArea(LinearLayout root) {
         progress = new ProgressBar(this);
         progress.setVisibility(View.GONE);
@@ -303,22 +409,8 @@ public class MainActivity extends android.app.Activity {
         executor.execute(() -> {
             try {
                 JSONArray members = new JSONObject(request("GET", "/api/v1/members", null)).getJSONArray("members");
-                JSONObject selected = null;
-                for (int i = 0; i < members.length(); i++) {
-                    JSONObject member = members.optJSONObject(i);
-                    if (member != null && member.optString("id").equals(profile.id)) selected = member;
-                }
-                if (selected == null && members.length() > 0) selected = members.optJSONObject(0);
-                JSONObject finalSelected = selected;
                 runOnUiThread(() -> {
                     familyMembers = members;
-                    if (finalSelected != null && (!finalSelected.optString("id").equals(profile.id)
-                            || !finalSelected.optString("role").equals(profile.role)
-                            || !finalSelected.optString("name").equals(profile.name))) {
-                        MemberProfileSettings.set(this, finalSelected.optString("id"), finalSelected.optString("name"), finalSelected.optString("role"));
-                        recreate();
-                        return;
-                    }
                     if (profileButton != null) profileButton.setText(profileLabel(profile));
                     selectDefaultStoryChild();
                 });
@@ -326,36 +418,6 @@ public class MainActivity extends android.app.Activity {
                 showError(error);
             }
         });
-    }
-
-    private void showProfileSettings() {
-        if (recorder != null) {
-            Toast.makeText(this, tr("Finish the recording before switching profile", "请先结束录音，再切换身份"), Toast.LENGTH_LONG).show();
-            return;
-        }
-        if (familyMembers.length() == 0) {
-            Toast.makeText(this, tr("Family profiles are still loading", "家庭身份仍在加载"), Toast.LENGTH_SHORT).show();
-            return;
-        }
-        String[] labels = new String[familyMembers.length()];
-        int selected = 0;
-        for (int i = 0; i < familyMembers.length(); i++) {
-            JSONObject member = familyMembers.optJSONObject(i);
-            labels[i] = member.optString("name") + " · " + roleLabel(member.optString("role"));
-            if (member.optString("id").equals(profile.id)) selected = i;
-        }
-        new AlertDialog.Builder(this)
-                .setTitle(tr("Who is using this phone?", "谁正在使用这台手机？"))
-                .setSingleChoiceItems(labels, selected, (dialog, which) -> {
-                    JSONObject member = familyMembers.optJSONObject(which);
-                    if (member != null && !member.optString("id").equals(profile.id)) {
-                        MemberProfileSettings.set(this, member.optString("id"), member.optString("name"), member.optString("role"));
-                        dialog.dismiss();
-                        recreate();
-                    } else dialog.dismiss();
-                })
-                .setNegativeButton(tr("Cancel", "取消"), null)
-                .show();
     }
 
     private String profileLabel(MemberProfileSettings.Profile value) {
@@ -803,14 +865,8 @@ public class MainActivity extends android.app.Activity {
         baseUrl.setHint(tr("NAS service address, for example https://family.example.com", "NAS 服务地址，例如 https://family.example.com"));
         baseUrl.setSingleLine(true);
         baseUrl.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        baseUrl.setText(prefs.getString(PhotoSync.KEY_BASE_URL, ""));
+        baseUrl.setText(prefs.getString(PhotoSync.KEY_BASE_URL, MediaUploadClient.trimTrailingSlash(BuildConfig.API_BASE_URL)));
         fields.addView(baseUrl, fullWidth());
-        EditText token = new EditText(this);
-        token.setHint(tr("Member token", "成员令牌"));
-        token.setSingleLine(true);
-        token.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        token.setText(prefs.getString(PhotoSync.KEY_MEMBER_TOKEN, ""));
-        fields.addView(token, fullWidth());
         EditText lookbackDays = new EditText(this);
         lookbackDays.setHint(tr("Days of photos to sync (1–3650)", "同步最近多少天（1-3650）"));
         lookbackDays.setSingleLine(true);
@@ -819,22 +875,21 @@ public class MainActivity extends android.app.Activity {
         fields.addView(lookbackDays, fullWidth());
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle(tr("Connect your private Space", "连接你的私人空间"))
-                .setMessage(tr("The address must be a Family Daily service reachable from this phone. The token stays in this app's private storage.", "地址必须是手机能访问的 Family Daily 服务；令牌只保存在此 App 的私有数据中。"))
+                .setMessage(tr("The address must be a Family Daily service reachable from this phone. Photo sync uses your current personal login.", "地址必须是手机能访问的 Family Daily 服务；照片同步会使用你当前的个人登录。"))
                 .setView(fields)
                 .setNegativeButton(tr("Cancel", "取消"), null)
                 .setPositiveButton(tr("Save", "保存"), null)
                 .create();
         dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             String url = MediaUploadClient.trimTrailingSlash(baseUrl.getText().toString());
-            String memberToken = token.getText().toString().trim();
             int days;
             try {
                 days = Integer.parseInt(lookbackDays.getText().toString().trim());
             } catch (NumberFormatException invalidNumber) {
                 days = 0;
             }
-            if (!MediaUploadClient.isValidBaseUrl(url) || memberToken.isEmpty()) {
-                Toast.makeText(this, tr("Enter a complete http(s) address and member token", "请填写完整的 http(s) 地址和成员令牌"), Toast.LENGTH_LONG).show();
+            if (!MediaUploadClient.isValidBaseUrl(url)) {
+                Toast.makeText(this, tr("Enter a complete http(s) service address", "请填写完整的 http(s) 服务地址"), Toast.LENGTH_LONG).show();
                 return;
             }
             if (!PhotoSyncWindow.isValidDays(days)) {
@@ -842,15 +897,13 @@ public class MainActivity extends android.app.Activity {
                 return;
             }
             String oldUrl = prefs.getString(PhotoSync.KEY_BASE_URL, "");
-            String oldToken = prefs.getString(PhotoSync.KEY_MEMBER_TOKEN, "");
             int oldDays = PhotoSync.lookbackDays(this);
             android.content.SharedPreferences.Editor edit = prefs.edit()
                     .putString(PhotoSync.KEY_BASE_URL, url)
-                    .putString(PhotoSync.KEY_MEMBER_TOKEN, memberToken)
                     .putInt(PhotoSync.KEY_LOOKBACK_DAYS, days)
                     .putBoolean(PhotoSync.KEY_ENABLED, true)
                     .putString(PhotoSync.KEY_STATUS, tr("Connection saved; photos from the last " + days + " days will sync", "连接已保存；将同步最近 " + days + " 天的照片"));
-            if (!url.equals(oldUrl) || !memberToken.equals(oldToken) || days != oldDays
+            if (!url.equals(oldUrl) || days != oldDays
                     || !prefs.contains(PhotoSync.KEY_LOOKBACK_DAYS)) {
                 edit.putLong(PhotoSync.KEY_CURSOR_SECONDS, 0).putLong(PhotoSync.KEY_CURSOR_ID, 0);
             }
@@ -1024,7 +1077,7 @@ public class MainActivity extends android.app.Activity {
         MediaPlayer player = new MediaPlayer();
         try {
             Map<String, String> headers = new HashMap<>();
-            headers.put("X-Family-Token", BuildConfig.FAMILY_API_TOKEN);
+            headers.put("Authorization", "Bearer " + session.accessToken);
             player.setDataSource(this, android.net.Uri.parse(BuildConfig.API_BASE_URL + path), headers);
             player.setOnPreparedListener(mediaPlayer -> {
                 button.setText(tr("Playing…", "正在播放……"));
@@ -1064,13 +1117,18 @@ public class MainActivity extends android.app.Activity {
     }
 
     private HttpURLConnection openConnection(String method, String path) throws Exception {
+        HttpURLConnection connection = openPublicConnection(method, path);
+        connection.setRequestProperty("Authorization", "Bearer " + session.accessToken);
+        return connection;
+    }
+
+    private HttpURLConnection openPublicConnection(String method, String path) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(BuildConfig.API_BASE_URL + path).openConnection();
         connection.setRequestMethod(method);
         connection.setConnectTimeout(10_000);
         connection.setReadTimeout(180_000);
         connection.setRequestProperty("Accept", "application/json");
         connection.setRequestProperty("Accept-Language", language);
-        connection.setRequestProperty("X-Family-Token", BuildConfig.FAMILY_API_TOKEN);
         return connection;
     }
 

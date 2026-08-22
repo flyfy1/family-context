@@ -35,7 +35,7 @@ public final class PhotoSyncWorker extends Worker {
         }
 
         String baseUrl = prefs.getString(PhotoSync.KEY_BASE_URL, "").trim();
-        String memberToken = prefs.getString(PhotoSync.KEY_MEMBER_TOKEN, "").trim();
+        String memberToken = MemberSessionSettings.get(context).accessToken;
         int lookbackDays = PhotoSync.lookbackDays(context);
         if (!PhotoSyncWindow.isValidDays(lookbackDays)) {
             setStatus(prefs, tr(language, "Sync paused: the photo lookback range is invalid", "同步暂停：照片回溯天数设置不正确"));
@@ -108,7 +108,7 @@ public final class PhotoSyncWorker extends Worker {
             return Result.success();
         } catch (MediaUploadClient.HttpUploadException httpError) {
             if (httpError.statusCode == 400 || httpError.statusCode == 401 || httpError.statusCode == 403) {
-                setStatus(prefs, tr(language, "Sync paused: check the NAS address, member token, or photo format", "同步暂停：请检查 NAS 地址、成员令牌或照片格式"));
+                setStatus(prefs, tr(language, "Sync paused: sign in again or check the service address and photo format", "同步暂停：请重新登录，或检查服务地址和照片格式"));
                 return Result.failure();
             }
             setStatus(prefs, tr(language, "The network or service is unavailable; sync will retry later", "网络或服务暂时不可用，稍后自动重试"));

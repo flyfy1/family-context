@@ -20,7 +20,6 @@ final class PhotoSync {
     static final String PREFS = "photo-sync";
     static final String KEY_ENABLED = "enabled";
     static final String KEY_BASE_URL = "base-url";
-    static final String KEY_MEMBER_TOKEN = "member-token";
     static final String KEY_LOOKBACK_DAYS = "lookback-days";
     static final String KEY_DEVICE_ID = "device-id";
     static final String KEY_CURSOR_SECONDS = "cursor-seconds";
@@ -48,7 +47,7 @@ final class PhotoSync {
     static boolean isConfigured(Context context) {
         SharedPreferences prefs = preferences(context);
         return !prefs.getString(KEY_BASE_URL, "").trim().isEmpty()
-                && !prefs.getString(KEY_MEMBER_TOKEN, "").trim().isEmpty();
+                && MemberSessionSettings.get(context).isAuthenticated();
     }
 
     static int lookbackDays(Context context) {

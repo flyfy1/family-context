@@ -16,7 +16,6 @@ android {
         versionName = "0.2.0"
 
         buildConfigField("String", "API_BASE_URL", "\"${familyApiBaseUrl.get()}\"")
-        buildConfigField("String", "FAMILY_API_TOKEN", "\"family-daily-local\"")
     }
 
     buildFeatures {
