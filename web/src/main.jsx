@@ -548,10 +548,17 @@ function HoldRecorder({ api, member, notify, onCreated }) {
       const mimeType = types.find(type => MediaRecorder.isTypeSupported(type)) || "";
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       const chunks = [];
+      const recordingStartedAt = Date.now();
       recorder.ondataavailable = event => event.data.size && chunks.push(event.data);
       recorder.onstop = async () => {
         stream.getTracks().forEach(track => track.stop());
-        setRecordingMode(""); setPreviewStream(null); setBusy(true); setBusyMode(mode);
+        setRecordingMode(""); setPreviewStream(null);
+        if (Date.now() - recordingStartedAt < 800 || chunks.every(chunk => chunk.size === 0)) {
+          notify(mode === "video" ? tx("Hold V while you finish the video, then release it", "请按住 V 录完视频后再松开") : tx("Hold Space while you speak, then release it", "请按住空格键说完后再松开"));
+          setSeconds(0); state.current = null;
+          return;
+        }
+        setBusy(true); setBusyMode(mode);
         const type = (recorder.mimeType || (mode === "video" ? "video/webm" : "audio/webm")).split(";")[0];
         try {
           if (mode === "video") {
@@ -566,8 +573,8 @@ function HoldRecorder({ api, member, notify, onCreated }) {
             const form = new FormData();
             form.append("familyId", FAMILY_ID); form.append("memberId", member.id); form.append("visibility", "family");
             form.append("audio", new Blob(chunks, { type }), `elder-update.${type.includes("mp4") ? "m4a" : "webm"}`);
-            await api("/api/v1/updates/voice", { method: "POST", body: form });
-            notify(tx("Your audio was organized and shared with the family", "语音已整理并分享给家人"));
+            const update = await api("/api/v1/updates/voice", { method: "POST", body: form });
+            notify(update.source === "member_voice_processing_failed" ? tx("Your audio was saved and shared; AI organization is temporarily unavailable", "语音已保存并分享；AI 暂时未完成整理") : tx("Your audio was organized and shared with the family", "语音已整理并分享给家人"));
           }
           await onCreated();
         }

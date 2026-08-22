@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"io"
+	"log"
 	"mime"
 	"net/http"
 	"os"
@@ -294,8 +295,7 @@ func (a *app) createVoiceUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if processErr != nil {
-		writeJSON(w, http.StatusBadGateway, update)
-		return
+		log.Printf("audio processing failed for voice update %s: %v", update.ID, processErr)
 	}
 	writeJSON(w, http.StatusCreated, update)
 }

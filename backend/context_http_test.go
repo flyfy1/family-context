@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +14,12 @@ import (
 	"testing"
 	"time"
 )
+
+type failingVoiceProcessor struct{ stubAudioProcessor }
+
+func (failingVoiceProcessor) Process(context.Context, []byte, string) (AudioResult, error) {
+	return AudioResult{}, errors.New("test processor unavailable")
+}
 
 func TestMemberUpdateAndDailySummaryLoop(t *testing.T) {
 	t.Parallel()
@@ -141,6 +149,58 @@ func TestVoiceUpdateIsStoredInMemberSpace(t *testing.T) {
 	defer audioResp.Body.Close()
 	if audioResp.StatusCode != http.StatusOK {
 		t.Fatalf("audio status = %d", audioResp.StatusCode)
+	}
+}
+
+func TestVoiceUpdateRemainsCreatedWhenAIProcessingFails(t *testing.T) {
+	t.Parallel()
+	temp := t.TempDir()
+	store, err := openStore(filepath.Join(temp, "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close() })
+	mediaDir := filepath.Join(temp, "media")
+	if err := os.MkdirAll(mediaDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(newApp(store, failingVoiceProcessor{}, mediaDir, "test-token").routes())
+	t.Cleanup(server.Close)
+	member := requestJSON[Member](t, server.Client(), http.MethodPost, server.URL+"/api/v1/members", map[string]string{
+		"familyId": defaultFamilyID, "name": "奶奶", "role": "elder", "color": "#54706A",
+	}, http.StatusCreated)
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	_ = writer.WriteField("familyId", defaultFamilyID)
+	_ = writer.WriteField("memberId", member.ID)
+	_ = writer.WriteField("visibility", "family")
+	part, err := writer.CreateFormFile("audio", "update.m4a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = part.Write([]byte("valid-enough-test-audio"))
+	_ = writer.Close()
+	req, _ := http.NewRequest(http.MethodPost, server.URL+"/api/v1/updates/voice", &body)
+	req.Header.Set("X-Admin-Token", "test-token")
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	resp, err := server.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("voice update status = %d, want %d", resp.StatusCode, http.StatusCreated)
+	}
+	var update Update
+	if err := json.NewDecoder(resp.Body).Decode(&update); err != nil {
+		t.Fatal(err)
+	}
+	if update.Source != "member_voice_processing_failed" || update.AudioURL == "" || update.Visibility != "family" {
+		t.Fatalf("voice update did not preserve durable success: %+v", update)
+	}
+	if _, err := os.Stat(filepath.Join(temp, "spaces", "shared", "updates", update.ID+".json")); err != nil {
+		t.Fatalf("shared voice projection missing: %v", err)
 	}
 }
 
