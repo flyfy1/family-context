@@ -67,7 +67,8 @@ install -m 0755 /tmp/family-daily "$HOME/.local/bin/family-daily"
 install -m 0755 /tmp/run.sh "$HOME/.local/libexec/family-daily/run.sh"
 install -m 0600 /tmp/life.integ.family-daily.plist "$agent"
 
-launchctl bootout "gui/$(id -u)/life.integ.family-daily" 2>/dev/null || true
+launchctl bootout "gui/$(id -u)" "$agent" 2>/dev/null || true
+sleep 2
 launchctl bootstrap "gui/$(id -u)" "$agent"
 launchctl kickstart -k "gui/$(id -u)/life.integ.family-daily"
 
