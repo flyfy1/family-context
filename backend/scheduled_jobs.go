@@ -454,6 +454,10 @@ func (a *app) adminSaveScheduledJob(w http.ResponseWriter, r *http.Request, id s
 	if input.FamilyID == "" {
 		input.FamilyID = defaultFamilyID
 	}
+	if input.MemberIDs != nil && len(input.MemberIDs) == 0 {
+		writeError(w, http.StatusBadRequest, "请至少选择一位任务成员")
+		return
+	}
 	now := time.Now().UTC()
 	job, err := a.store.saveScheduledJob(r.Context(), ScheduledJob{ID: id, FamilyID: input.FamilyID, Type: strings.TrimSpace(input.Type),
 		Title: strings.TrimSpace(input.Title), TargetMemberID: strings.TrimSpace(input.TargetMemberID), IncludeTarget: input.IncludeTarget,

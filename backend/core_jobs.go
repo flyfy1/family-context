@@ -415,6 +415,10 @@ func (a *app) adminSaveCoreJobRule(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "成员、未发布时长或提醒内容不正确")
 		return
 	}
+	if input.Enabled && input.RecipientMemberIDs != nil && len(input.RecipientMemberIDs) == 0 {
+		writeError(w, http.StatusBadRequest, "请至少选择一位提醒对象")
+		return
+	}
 	rule, err := a.store.saveCoreJobRule(r.Context(), CoreJobRule{FamilyID: input.FamilyID, TargetMemberID: memberID,
 		Enabled: input.Enabled, IncludeTarget: input.IncludeTarget, RecipientMemberIDs: input.RecipientMemberIDs, InactivityHours: input.InactivityHours, ReminderText: input.ReminderText, UpdatedAt: time.Now().UTC()})
 	if errors.Is(err, sql.ErrNoRows) {
