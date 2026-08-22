@@ -1,0 +1,127 @@
+package main
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"testing"
+	"time"
+)
+
+func TestNoPostCoreJobDetectsDeduplicatesAndResetsAfterActivity(t *testing.T) {
+	store, err := openStore(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close() })
+	ctx := context.Background()
+	now := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
+	subject := Member{ID: "elder", FamilyID: defaultFamilyID, Name: "妈妈", Role: "elder", Color: "#54706A", CreatedAt: now.Add(-48 * time.Hour)}
+	recipientA := Member{ID: "daughter", FamilyID: defaultFamilyID, Name: "女儿", Role: "member", Color: "#AD4C34", CreatedAt: now.Add(-48 * time.Hour)}
+	recipientB := Member{ID: "son", FamilyID: defaultFamilyID, Name: "儿子", Role: "member", Color: "#35677B", CreatedAt: now.Add(-48 * time.Hour)}
+	for _, member := range []Member{subject, recipientA, recipientB} {
+		if err := store.createMember(ctx, member); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	rule, err := store.saveCoreJobRule(ctx, CoreJobRule{FamilyID: defaultFamilyID, TargetMemberID: subject.ID,
+		Enabled: false, InactivityHours: 24, UpdatedAt: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := store.runCoreJobs(ctx, now)
+	if err != nil || result.NotificationsCreated != 0 {
+		t.Fatalf("disabled rule result=%+v err=%v", result, err)
+	}
+
+	rule.Enabled = true
+	rule.ReminderText = "妈妈今天还没有分享近况，方便时问候一下。"
+	rule.UpdatedAt = now
+	if _, err := store.saveCoreJobRule(ctx, rule); err != nil {
+		t.Fatal(err)
+	}
+	result, err = store.runCoreJobs(ctx, now)
+	if err != nil || result.AnomaliesDetected != 1 || result.NotificationsCreated != 2 {
+		t.Fatalf("first run result=%+v err=%v", result, err)
+	}
+	result, err = store.runCoreJobs(ctx, now.Add(time.Hour))
+	if err != nil || result.NotificationsCreated != 0 {
+		t.Fatalf("duplicate run result=%+v err=%v", result, err)
+	}
+
+	for _, recipient := range []Member{recipientA, recipientB} {
+		notifications, err := store.listNotifications(ctx, defaultFamilyID, recipient.ID)
+		if err != nil || len(notifications) != 1 || notifications[0].SubjectMemberID != subject.ID || notifications[0].Message != rule.ReminderText {
+			t.Fatalf("recipient %s notifications=%+v err=%v", recipient.ID, notifications, err)
+		}
+	}
+	if notifications, err := store.listNotifications(ctx, defaultFamilyID, subject.ID); err != nil || len(notifications) != 0 {
+		t.Fatalf("subject received own reminder: %+v err=%v", notifications, err)
+	}
+
+	activityAt := now.Add(2 * time.Hour)
+	if err := store.createUpdate(ctx, Update{ID: "new-activity", FamilyID: defaultFamilyID, MemberID: subject.ID, Type: "text",
+		Text: "今天在家看书。", Visibility: "private", Source: "member_api", CreatedAt: activityAt}, ""); err != nil {
+		t.Fatal(err)
+	}
+	result, err = store.runCoreJobs(ctx, activityAt.Add(23*time.Hour))
+	if err != nil || result.AnomaliesDetected != 0 {
+		t.Fatalf("recent private activity should count result=%+v err=%v", result, err)
+	}
+	result, err = store.runCoreJobs(ctx, activityAt.Add(24*time.Hour))
+	if err != nil || result.NotificationsCreated != 2 {
+		t.Fatalf("new quiet period result=%+v err=%v", result, err)
+	}
+}
+
+func TestCoreJobAdminConfigurationAndRecipientAPI(t *testing.T) {
+	t.Setenv("ADMIN_API_TOKEN", "admin-token")
+	temp := t.TempDir()
+	store, err := openStore(filepath.Join(temp, "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close() })
+	now := time.Now().UTC().Add(-48 * time.Hour)
+	for _, member := range []Member{
+		{ID: "elder", FamilyID: defaultFamilyID, Name: "爸爸", Role: "elder", Color: "#54706A", CreatedAt: now},
+		{ID: "family", FamilyID: defaultFamilyID, Name: "家人", Role: "member", Color: "#AD4C34", CreatedAt: now},
+	} {
+		if err := store.createMember(context.Background(), member); err != nil {
+			t.Fatal(err)
+		}
+	}
+	server := httptest.NewServer(newApp(store, stubAudioProcessor{}, filepath.Join(temp, "media"), "family-token").routes())
+	t.Cleanup(server.Close)
+
+	request, _ := http.NewRequest(http.MethodPut, server.URL+"/api/v1/admin/core-job-rules/elder", nil)
+	response, err := server.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("admin rule without token status=%d", response.StatusCode)
+	}
+
+	rule := requestScopedJSON[CoreJobRule](t, server.Client(), http.MethodPut, server.URL+"/api/v1/admin/core-job-rules/elder",
+		map[string]any{"familyId": defaultFamilyID, "enabled": true, "inactivityHours": 24, "reminderText": "请联系爸爸确认近况。"},
+		"X-Admin-Token", "admin-token", http.StatusOK)
+	if !rule.Enabled || rule.TargetMemberName != "爸爸" {
+		t.Fatalf("unexpected saved rule: %+v", rule)
+	}
+	result := requestScopedJSON[CoreJobRunResult](t, server.Client(), http.MethodPost, server.URL+"/api/v1/admin/core-jobs/run", map[string]any{},
+		"X-Admin-Token", "admin-token", http.StatusOK)
+	if result.NotificationsCreated != 1 {
+		t.Fatalf("unexpected run result: %+v", result)
+	}
+	notifications := requestScopedJSON[struct {
+		Notifications []Notification `json:"notifications"`
+	}](t, server.Client(), http.MethodGet, server.URL+"/api/v1/notifications?memberId=family", nil,
+		"X-Family-Token", "family-token", http.StatusOK)
+	if len(notifications.Notifications) != 1 || notifications.Notifications[0].RecipientMemberID != "family" {
+		t.Fatalf("unexpected notifications: %+v", notifications.Notifications)
+	}
+}
