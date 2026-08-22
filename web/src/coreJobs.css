@@ -1,0 +1,19 @@
+.notification-inbox { display: grid; gap: 10px; margin-top: 20px; }
+.notification-item { display: flex; align-items: center; gap: 13px; padding: 15px 17px; border: 1px solid #e8c2a8; border-radius: 15px; color: #6f321f; background: #fff2e8; box-shadow: 0 8px 24px rgba(119, 62, 32, .07); }
+.notification-icon { width: 31px; height: 31px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 50%; color: white; background: #ad4c34; font-weight: 800; }
+.notification-item div { flex: 1; }.notification-item strong { font-size: 13px; }.notification-item p { margin: 3px 0 0; font-size: 12px; line-height: 1.55; }
+.notification-item button { border: 0; color: #873d29; background: transparent; font-weight: 750; white-space: nowrap; }
+.core-job-panel { display: grid; gap: 22px; }
+.admin-connection { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 12px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
+.admin-connection label, .core-job-form > label { display: grid; gap: 7px; color: var(--muted); font-size: 11px; font-weight: 700; }
+.admin-connection input, .core-job-form select, .core-job-form input[type="number"], .core-job-form textarea { width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: #fffdf9; font: inherit; }
+.core-job-form { display: grid; gap: 16px; }
+.core-job-toggle { grid-template-columns: auto 1fr !important; align-items: start; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper-2); }
+.core-job-toggle input { margin-top: 3px; accent-color: var(--rust); }.core-job-toggle span { display: grid; gap: 3px; }.core-job-toggle strong { color: var(--ink); font-size: 13px; }.core-job-toggle small { font-weight: 400; line-height: 1.5; }
+.hours-input { display: flex; align-items: center; gap: 9px; }.hours-input input { max-width: 150px; }.hours-input small { white-space: nowrap; }
+.core-job-form textarea { resize: vertical; line-height: 1.55; }.core-job-form .primary-button { justify-self: end; }
+
+@media (max-width: 760px) {
+  .notification-item { align-items: flex-start; flex-wrap: wrap; }.notification-item div { min-width: calc(100% - 48px); }.notification-item button { margin-left: 44px; }
+  .admin-connection { grid-template-columns: 1fr; }.admin-connection button, .core-job-form .primary-button { width: 100%; justify-self: stretch; }
+}
