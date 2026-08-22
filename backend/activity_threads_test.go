@@ -81,11 +81,29 @@ func TestScheduledActivityCreatesParticipantOnlyThreadWithPosts(t *testing.T) {
 	if mediaPost.Type != "image" || mediaPost.MediaURL == "" {
 		t.Fatalf("unexpected media post: %+v", mediaPost)
 	}
+	videoBody := new(bytes.Buffer)
+	videoWriter := multipart.NewWriter(videoBody)
+	videoPart, err := videoWriter.CreateFormFile("media", "memory.mp4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	videoBytes := make([]byte, 512)
+	copy(videoBytes, []byte{0, 0, 0, 24, 'f', 't', 'y', 'p', 'm', 'p', '4', '2'})
+	if _, err := videoPart.Write(videoBytes); err != nil {
+		t.Fatal(err)
+	}
+	if err := videoWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	videoPost := memberJSON[ActivityPost](t, server, first.AccessToken, http.MethodPost, "/api/v1/me/activity-threads/"+threadID+"/media", videoBody, videoWriter.FormDataContentType(), http.StatusCreated)
+	if videoPost.Type != "video" || videoPost.MimeType != "video/mp4" {
+		t.Fatalf("unexpected video post: %+v", videoPost)
+	}
 
 	secondThreads := memberJSON[struct {
 		Threads []ActivityThread `json:"threads"`
 	}](t, server, second.AccessToken, http.MethodGet, "/api/v1/me/activity-threads", nil, "application/json", http.StatusOK)
-	if len(secondThreads.Threads) != 1 || len(secondThreads.Threads[0].Posts) != 2 {
+	if len(secondThreads.Threads) != 1 || len(secondThreads.Threads[0].Posts) != 3 {
 		t.Fatalf("participant did not see posts: %+v", secondThreads.Threads)
 	}
 	mediaResponse := memberRequest(t, server, first.AccessToken, http.MethodGet, mediaPost.MediaURL, nil, "")
