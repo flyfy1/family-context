@@ -26,7 +26,7 @@ func prepareSpacesRoot(storageRoot string) (string, error) {
 
 func createMemberSpace(spacesRoot string, member Member) error {
 	root := filepath.Join(spacesRoot, "members", member.ID)
-	for _, name := range []string{"private", "updates", "media", "summaries", "jobs", "context"} {
+	for _, name := range []string{"private", "updates", "media", "imports", "summaries", "jobs", "context"} {
 		if err := os.MkdirAll(filepath.Join(root, name), 0o750); err != nil {
 			return err
 		}
@@ -36,6 +36,14 @@ func createMemberSpace(spacesRoot string, member Member) error {
 		return err
 	}
 	return writeFileAtomically(root, "profile.json", append(data, '\n'))
+}
+
+func persistMediaImportToSpace(spacesRoot string, mediaImport MediaImport) error {
+	data, err := json.MarshalIndent(mediaImport, "", "  ")
+	if err != nil {
+		return err
+	}
+	return writeFileAtomically(filepath.Join(spacesRoot, "members", mediaImport.MemberID, "imports"), mediaImport.ID+".json", append(data, '\n'))
 }
 
 func persistUpdateToSpace(spacesRoot string, update Update) error {

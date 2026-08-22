@@ -26,6 +26,10 @@ type sharePolicyEvaluator interface {
 	EvaluateShare(ctx context.Context, text, prompt string) (ShareDecision, error)
 }
 
+type mediaAnalyzer interface {
+	AnalyzeMedia(ctx context.Context, media []byte, mimeType, sharePrompt string) (MediaAnalysis, error)
+}
+
 type ShareDecision struct {
 	Allowed bool   `json:"allowed"`
 	Reason  string `json:"reason"`
@@ -61,6 +65,83 @@ func (stubAudioProcessor) Summarize(_ context.Context, updates []Update, members
 
 func (stubAudioProcessor) EvaluateShare(_ context.Context, _ string, prompt string) (ShareDecision, error) {
 	return ShareDecision{Allowed: strings.TrimSpace(prompt) != "", Reason: "stub policy evaluation"}, nil
+}
+
+func (stubAudioProcessor) AnalyzeMedia(_ context.Context, _ []byte, mimeType, sharePrompt string) (MediaAnalysis, error) {
+	mediaType := "照片"
+	if strings.HasPrefix(mimeType, "video/") {
+		mediaType = "视频"
+	}
+	visibility := "private"
+	if strings.TrimSpace(sharePrompt) != "" {
+		visibility = "family"
+	}
+	return MediaAnalysis{Summary: "记录了一段家庭生活" + mediaType + "。", SuggestedCaption: "今天的生活片段", Activities: []string{"家庭生活"},
+		SuggestedVisibility: visibility, Reason: "stub media analysis"}, nil
+}
+
+func (g *geminiAudioProcessor) AnalyzeMedia(ctx context.Context, media []byte, mimeType, sharePrompt string) (MediaAnalysis, error) {
+	inputType := "image"
+	if strings.HasPrefix(mimeType, "video/") {
+		inputType = "video"
+	}
+	prompt := `分析这段家庭私人媒体，并输出简体中文 JSON。忠于可观察内容，不识别人脸身份，不推断姓名、健康、种族、宗教、政治、精确住址等敏感属性。people 只能用概括描述（例如“两位成年人和一个孩子”）。summary 和 suggestedCaption 要自然简短；activities 是可观察活动。containsSensitive 在出现证件、医疗资料、裸露、精确地址等不适合默认家庭分享的内容时为 true。根据成员的分享规则给出 suggestedVisibility（private 或 family）；规则没有明确允许，或内容敏感时必须 private。\n\n成员分享规则：\n` + strings.TrimSpace(sharePrompt)
+	payload := map[string]any{
+		"model": g.model, "store": false,
+		"input": []any{
+			map[string]any{"type": "text", "text": prompt},
+			map[string]any{"type": inputType, "data": base64.StdEncoding.EncodeToString(media), "mime_type": mimeType},
+		},
+		"response_format": []any{map[string]any{"type": "text", "mime_type": "application/json", "schema": map[string]any{
+			"type": "object", "properties": map[string]any{
+				"summary": map[string]any{"type": "string"}, "suggestedCaption": map[string]any{"type": "string"},
+				"people": map[string]any{"type": "string"}, "activities": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+				"containsSensitive": map[string]any{"type": "boolean"}, "suggestedVisibility": map[string]any{"type": "string", "enum": []string{"private", "family"}},
+				"reason": map[string]any{"type": "string"},
+			}, "required": []string{"summary", "suggestedCaption", "activities", "containsSensitive", "suggestedVisibility", "reason"},
+		}}},
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return MediaAnalysis{}, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://generativelanguage.googleapis.com/v1beta/interactions", bytes.NewReader(body))
+	if err != nil {
+		return MediaAnalysis{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-goog-api-key", g.apiKey)
+	resp, err := g.client.Do(req)
+	if err != nil {
+		return MediaAnalysis{}, fmt.Errorf("gemini media request: %w", err)
+	}
+	defer resp.Body.Close()
+	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	if err != nil {
+		return MediaAnalysis{}, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return MediaAnalysis{}, fmt.Errorf("gemini returned status %d", resp.StatusCode)
+	}
+	var interaction geminiInteractionResponse
+	if err := json.Unmarshal(responseBody, &interaction); err != nil {
+		return MediaAnalysis{}, fmt.Errorf("decode gemini media response: %w", err)
+	}
+	for i := len(interaction.Steps) - 1; i >= 0; i-- {
+		for _, content := range interaction.Steps[i].Content {
+			if content.Type != "text" || content.Text == "" {
+				continue
+			}
+			var analysis MediaAnalysis
+			if err := json.Unmarshal([]byte(content.Text), &analysis); err != nil {
+				continue
+			}
+			if analysis.Summary != "" && analysis.SuggestedCaption != "" && validVisibility(analysis.SuggestedVisibility) && analysis.Reason != "" {
+				return analysis, nil
+			}
+		}
+	}
+	return MediaAnalysis{}, fmt.Errorf("gemini media interaction ended with status %q and no structured output", interaction.Status)
 }
 
 type geminiAudioProcessor struct {

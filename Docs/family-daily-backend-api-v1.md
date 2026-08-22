@@ -36,6 +36,7 @@ spaces/members/<member-id>/
 ├── private/
 ├── updates/
 ├── media/
+├── imports/                # 手机媒体导入元数据与 AI 分析结果
 ├── summaries/
 ├── jobs/
 └── context/                # MCP 只能读写这里
@@ -52,6 +53,10 @@ GET  /api/v1/me
 GET  /api/v1/me/updates
 POST /api/v1/me/updates/text
 POST /api/v1/me/updates/image
+POST /api/v1/me/media-imports
+GET  /api/v1/me/media-imports
+GET  /api/v1/me/media-imports/{import-id}
+POST /api/v1/me/media-imports/{import-id}/decision
 GET  /api/v1/me/share-policy
 PUT  /api/v1/me/share-policy
 ```
@@ -63,6 +68,8 @@ PUT  /api/v1/me/share-policy
 - `visibility`：`private` 或 `family`。
 
 媒体先写入成员的 `media/`，然后写成员 Markdown 记录和 SQLite 索引。家庭可见内容另外生成 `spaces/shared/updates/<update-id>.json` 投影。
+
+手机照片/视频同步使用独立的私密导入流，不会在上传时默认公开。完整请求字段、幂等规则、AI 状态和审核流程见 [手机照片/视频同步 API V1](./mobile-media-sync-api-v1.md)。
 
 ## 分享策略
 
@@ -117,13 +124,11 @@ create_update
 
 ## 手机自动同步边界
 
-当前成员文字和图片 API 已经可以被手机 App 调用，但“自动同步”还缺少：
+当前已经实现手机照片/视频的私密导入、客户端幂等键、文件校验值、Gemini 分析建议和确认分享。“自动同步”仍缺少：
 
 - 设备注册与撤销；
 - 每设备 Scope；
-- 客户端内容 ID 与幂等写入；
 - 分块和断点续传；
-- 照片拍摄时间与文件校验和；
 - 网络和充电条件；
 - 删除同步语义；
 - 后台任务状态。

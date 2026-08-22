@@ -150,7 +150,7 @@ func scanUpdate(row rowScanner) (Update, error) {
 	}
 	if audioFile != "" {
 		url := "/space-files/members/" + update.MemberID + "/media/" + audioFile
-		if update.Type == "image" {
+		if update.Type == "image" || update.Type == "video" {
 			update.MediaURL = url
 		} else {
 			update.AudioURL = url

@@ -20,6 +20,8 @@ import (
 )
 
 const maxAudioBytes = 18 << 20
+const maxMediaImportBytes = 100 << 20
+const maxInlineAnalysisBytes = 14 << 20
 
 //go:embed web
 var embeddedWeb embed.FS
@@ -29,6 +31,7 @@ type app struct {
 	ai          audioProcessor
 	summarizer  dailySummarizer
 	sharePolicy sharePolicyEvaluator
+	mediaAI     mediaAnalyzer
 	mediaDir    string
 	spacesRoot  string
 	apiToken    string
@@ -50,7 +53,11 @@ func newApp(store *store, ai audioProcessor, mediaDir, apiToken string) *app {
 	if !ok {
 		sharePolicy = stubAudioProcessor{}
 	}
-	return &app{store: store, ai: ai, summarizer: summarizer, sharePolicy: sharePolicy, mediaDir: mediaDir, spacesRoot: spacesRoot, apiToken: apiToken,
+	mediaAI, ok := ai.(mediaAnalyzer)
+	if !ok {
+		mediaAI = stubAudioProcessor{}
+	}
+	return &app{store: store, ai: ai, summarizer: summarizer, sharePolicy: sharePolicy, mediaAI: mediaAI, mediaDir: mediaDir, spacesRoot: spacesRoot, apiToken: apiToken,
 		adminToken: envOr("ADMIN_API_TOKEN", apiToken), mcpSessions: make(map[string]string)}
 }
 
@@ -86,6 +93,10 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/me/updates", a.memberAuthorized(a.memberListUpdates))
 	mux.HandleFunc("POST /api/v1/me/updates/text", a.memberAuthorized(a.memberCreateTextUpdate))
 	mux.HandleFunc("POST /api/v1/me/updates/image", a.memberAuthorized(a.memberCreateImageUpdate))
+	mux.HandleFunc("POST /api/v1/me/media-imports", a.memberAuthorized(a.memberCreateMediaImport))
+	mux.HandleFunc("GET /api/v1/me/media-imports", a.memberAuthorized(a.memberListMediaImports))
+	mux.HandleFunc("GET /api/v1/me/media-imports/{id}", a.memberAuthorized(a.memberGetMediaImport))
+	mux.HandleFunc("POST /api/v1/me/media-imports/{id}/decision", a.memberAuthorized(a.memberDecideMediaImport))
 	mux.HandleFunc("GET /api/v1/me/share-policy", a.memberAuthorized(a.getSharePolicy))
 	mux.HandleFunc("PUT /api/v1/me/share-policy", a.memberAuthorized(a.saveSharePolicy))
 	mux.HandleFunc("GET /mcp/members/{id}", a.mcpEndpoint)

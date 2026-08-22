@@ -138,6 +138,27 @@ CREATE TABLE IF NOT EXISTS member_settings (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS media_imports (
+  id TEXT PRIMARY KEY,
+  family_id TEXT NOT NULL,
+  member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  media_type TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  original_name TEXT NOT NULL,
+  media_file TEXT NOT NULL,
+  captured_at TEXT,
+  device_id TEXT NOT NULL DEFAULT '',
+  client_media_id TEXT NOT NULL DEFAULT '',
+  sha256 TEXT NOT NULL,
+  analysis_status TEXT NOT NULL,
+  analysis_json TEXT NOT NULL DEFAULT '',
+  analysis_error TEXT NOT NULL DEFAULT '',
+  share_decision TEXT NOT NULL DEFAULT 'pending',
+  update_id TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_questions_created_at ON questions(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_replies_answer_id ON replies(answer_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_archived_answers_question_id ON archived_answers(question_id, archived_at DESC);
@@ -146,6 +167,8 @@ CREATE INDEX IF NOT EXISTS idx_members_family ON members(family_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_updates_family_created ON updates(family_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_updates_member_created ON updates(member_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_summaries_family_date ON daily_summaries(family_id, summary_date DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_media_imports_member_created ON media_imports(member_id, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_media_imports_client_id ON media_imports(member_id, device_id, client_media_id) WHERE client_media_id != '';
 `)
 	if err != nil {
 		return err

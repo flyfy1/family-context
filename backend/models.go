@@ -96,6 +96,37 @@ type MemberCredential struct {
 	AccessToken string `json:"accessToken"`
 }
 
+type MediaAnalysis struct {
+	Summary             string   `json:"summary"`
+	SuggestedCaption    string   `json:"suggestedCaption"`
+	People              string   `json:"people,omitempty"`
+	Activities          []string `json:"activities"`
+	ContainsSensitive   bool     `json:"containsSensitive"`
+	SuggestedVisibility string   `json:"suggestedVisibility"`
+	Reason              string   `json:"reason"`
+}
+
+type MediaImport struct {
+	ID             string         `json:"id"`
+	FamilyID       string         `json:"familyId"`
+	MemberID       string         `json:"memberId"`
+	MediaType      string         `json:"mediaType"`
+	MimeType       string         `json:"mimeType"`
+	OriginalName   string         `json:"originalName"`
+	MediaURL       string         `json:"mediaUrl"`
+	CapturedAt     *time.Time     `json:"capturedAt,omitempty"`
+	DeviceID       string         `json:"deviceId,omitempty"`
+	ClientMediaID  string         `json:"clientMediaId,omitempty"`
+	SHA256         string         `json:"sha256"`
+	AnalysisStatus string         `json:"analysisStatus"`
+	Analysis       *MediaAnalysis `json:"analysis,omitempty"`
+	AnalysisError  string         `json:"analysisError,omitempty"`
+	ShareDecision  string         `json:"shareDecision"`
+	UpdateID       string         `json:"updateId,omitempty"`
+	CreatedAt      time.Time      `json:"createdAt"`
+	UpdatedAt      time.Time      `json:"updatedAt"`
+}
+
 type DailySummary struct {
 	ID          string    `json:"id"`
 	FamilyID    string    `json:"familyId"`

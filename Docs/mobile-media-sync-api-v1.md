@@ -1,0 +1,250 @@
+# Family Daily — 手机照片/视频同步 API V1
+
+> 日期：2026-08-22  
+> 状态：后端已实现；供 Android/iOS 客户端独立接入
+
+## 1. 这版打通的用户闭环
+
+```text
+手机照片/视频
+    ↓ 成员 Bearer Token
+先保存到该成员的私人 Space
+    ↓
+Gemini 内容分析 + 分享建议
+    ↓
+review/manual：等待成员确认
+auto：仅在成员明确配置 Prompt 且 AI 建议安全分享时发布
+    ↓
+生成家庭可见 Update
+```
+
+上传不是“直接发动态”。原始媒体始终先成为 `MediaImport`，默认 `shareDecision=pending`。AI 失败不会回滚或删除本地原件。
+
+V1 的分享对象只有：
+
+- `private`：仅成员自己；
+- `family`：整个家庭。
+
+“只分享给爸爸和妈妈”等成员级收件人 ACL 不在本版权限模型内。
+
+## 2. 鉴权
+
+所有接口都使用成员令牌：
+
+```http
+Authorization: Bearer <member-token>
+```
+
+成员令牌由管理员创建成员或轮换令牌时签发。服务端数据库只保存令牌哈希。客户端不能提交 `memberId`；服务端只根据 Bearer Token 决定写入哪个成员 Space，避免越权。
+
+## 3. 接口一览
+
+```text
+POST /api/v1/me/media-imports
+GET  /api/v1/me/media-imports
+GET  /api/v1/me/media-imports/{import-id}
+POST /api/v1/me/media-imports/{import-id}/decision
+```
+
+读取原文件继续使用响应中的鉴权 URL：
+
+```text
+GET /space-files/members/{member-id}/media/{file-name}
+Authorization: Bearer <member-token>
+```
+
+其他成员的令牌不能读取该文件或 `MediaImport`。
+
+## 4. 上传照片或视频
+
+### 请求
+
+```http
+POST /api/v1/me/media-imports
+Authorization: Bearer <member-token>
+Content-Type: multipart/form-data
+```
+
+| 字段 | 必填 | 说明 |
+|---|---:|---|
+| `media` | 是 | 原始照片或视频，最大 100MB |
+| `capturedAt` | 否 | 媒体拍摄时间，RFC3339，例如 `2026-08-22T12:00:00+08:00` |
+| `deviceId` | 建议 | App 安装/设备的稳定随机 ID，最长 200 字符 |
+| `clientMediaId` | 建议 | 客户端为这项媒体生成的稳定 ID，最长 200 字符 |
+
+支持格式：
+
+- 图片：JPEG、PNG、WebP、GIF；
+- 视频：MP4、QuickTime/MOV、WebM。
+
+不要把设备序列号、手机号或广告 ID 直接用作 `deviceId`。建议首次安装时生成随机 UUID，存入 App 私有存储。
+
+`deviceId + clientMediaId` 在同一成员下是幂等键。首次创建返回 `201`；相同键的重试返回已有记录和 `200`，不会再次保存、分析或分享。客户端必须在重试时复用同一个 `clientMediaId`。
+
+示例：
+
+```bash
+curl -X POST "$API_BASE/api/v1/me/media-imports" \
+  -H "Authorization: Bearer $MEMBER_TOKEN" \
+  -F "media=@/path/to/photo.jpg;type=image/jpeg" \
+  -F "capturedAt=2026-08-22T12:00:00+08:00" \
+  -F "deviceId=8ef68f4d-32ce-4aa2-a2c8-2a299795bf89" \
+  -F "clientMediaId=media-store-id-10482"
+```
+
+### 响应
+
+```json
+{
+  "id": "...",
+  "familyId": "family-default",
+  "memberId": "...",
+  "mediaType": "image",
+  "mimeType": "image/jpeg",
+  "originalName": "photo.jpg",
+  "mediaUrl": "/space-files/members/.../media/....jpg",
+  "capturedAt": "2026-08-22T04:00:00Z",
+  "deviceId": "8ef68f4d-32ce-4aa2-a2c8-2a299795bf89",
+  "clientMediaId": "media-store-id-10482",
+  "sha256": "...",
+  "analysisStatus": "ready",
+  "analysis": {
+    "summary": "一个孩子正在公园骑自行车。",
+    "suggestedCaption": "今天在公园练习骑车",
+    "people": "一位孩子",
+    "activities": ["骑自行车"],
+    "containsSensitive": false,
+    "suggestedVisibility": "family",
+    "reason": "符合成员配置的普通家庭活动分享规则"
+  },
+  "shareDecision": "pending",
+  "createdAt": "2026-08-22T04:10:00Z",
+  "updatedAt": "2026-08-22T04:10:03Z"
+}
+```
+
+`sha256` 是服务端收到的原始字节的 SHA-256。客户端可以与本地值比较，确认上传内容一致。
+
+## 5. 分析状态
+
+| `analysisStatus` | 含义 | 客户端行为 |
+|---|---|---|
+| `processing` | 原件已经落盘，但服务在同步分析期间中断 | V1 不会后台恢复；仍可手动决定是否分享 |
+| `ready` | 分析完成 | 展示摘要与分享建议 |
+| `failed` | Gemini 或本地策略读取失败 | 保留私密；允许用户手动决定 |
+| `skipped_too_large` | 文件已保存，但超过当前 14MB 自动分析上限 | 保留私密；允许用户手动决定 |
+
+当前请求是同步处理：小媒体在 `POST` 响应前完成 Gemini 分析。V1 不增加任务队列和轮询任务资源。
+
+14MB 是服务端对原始文件的保守限制，因为媒体会进行 Base64 编码，Gemini 内嵌图片/短视频请求的总大小限制还包括 Prompt。大文件仍允许同步到 NAS/本地 Space，但不会上传到 Gemini Files API。升级版可增加本地后台任务，并在分析后主动删除 Gemini 临时文件。
+
+参考：[Gemini 图片理解](https://ai.google.dev/gemini-api/docs/image-understanding)、[Gemini 视频理解](https://ai.google.dev/gemini-api/docs/video-understanding)。
+
+## 6. 分享策略如何生效
+
+成员继续通过以下接口配置策略：
+
+```http
+PUT /api/v1/me/share-policy
+Content-Type: application/json
+
+{
+  "shareMode": "review",
+  "sharePrompt": "普通家庭活动可以分享；证件、医疗资料和精确地址不要分享。"
+}
+```
+
+| 模式 | 上传后的行为 |
+|---|---|
+| `manual` | AI 可以根据已保存的 Prompt 给建议，但绝不自动发布；成员手动分享 |
+| `review` | AI 根据 Prompt 给建议，但始终等待成员确认 |
+| `auto` | 仅当 Prompt 非空、AI 建议 `family` 且 `containsSensitive=false` 时自动生成家庭 Update |
+
+无论 Prompt 写了什么，它都不能跨越成员令牌和文件目录权限。AI 也被要求不做人脸身份识别、不猜测姓名或敏感属性。
+
+## 7. 确认保留或分享
+
+### 保持私密
+
+```http
+POST /api/v1/me/media-imports/{import-id}/decision
+Authorization: Bearer <member-token>
+Content-Type: application/json
+
+{
+  "visibility": "private"
+}
+```
+
+### 分享给家庭
+
+```http
+POST /api/v1/me/media-imports/{import-id}/decision
+Authorization: Bearer <member-token>
+Content-Type: application/json
+
+{
+  "visibility": "family",
+  "caption": "今天在公园第一次学会骑车。"
+}
+```
+
+`caption` 可选，最长 2000 字。为空时优先使用 AI 的 `suggestedCaption`，否则使用通用说明。
+
+家庭分享会创建一个 `source=mobile_media_import` 的 `Update`，并在响应中设置：
+
+```json
+{
+  "shareDecision": "family",
+  "updateId": "..."
+}
+```
+
+重复提交 `family` 是幂等的，返回同一个 `updateId`。已经分享的记录不能再通过此接口改回私密；管理员可以用既有的 Update 可见性管理接口处理撤回，后续版本应提供成员自己的撤回流程。
+
+即使 `analysisStatus=failed` 或 `skipped_too_large`，成员仍可以明确选择分享。
+
+## 8. 查询记录
+
+```http
+GET /api/v1/me/media-imports
+GET /api/v1/me/media-imports/{import-id}
+Authorization: Bearer <member-token>
+```
+
+列表按服务端接收时间倒序返回：
+
+```json
+{
+  "mediaImports": []
+}
+```
+
+V1 列表暂未分页。手机端 PoC 可用于验证闭环；相册全量同步前必须加入 cursor 分页。
+
+## 9. 本地持久化
+
+```text
+data/
+├── family-daily.db
+└── spaces/
+    ├── members/<member-id>/
+    │   ├── media/<import-id>.<ext>       # 原始字节
+    │   ├── imports/<import-id>.json      # 可回溯元数据与 AI 结果
+    │   └── updates/<update-id>.md        # 分享后生成
+    └── shared/updates/<update-id>.json   # 家庭共享投影
+```
+
+SQLite 保存 `MediaImport`、分析结果、分享状态和审计事件，是权威索引；成员目录保存原件和可检查的 JSON/Markdown 文件。Gemini 请求设置 `store=false`，不会替代本地持久化。
+
+## 10. 手机端建议调用顺序
+
+1. 从系统相册拿到媒体，并为它保存稳定的 `clientMediaId`。
+2. 计算本地 SHA-256（可选但建议）。
+3. 调用上传接口；网络失败时用相同幂等键重试。
+4. 比较响应 `sha256`。
+5. 根据 `analysisStatus` 和 `analysis` 展示审核卡片。
+6. 用户选择后调用 `/decision`；`auto` 已分享时直接显示 `updateId`。
+7. App 本地记录已完成同步的 `clientMediaId`，避免重复扫描上传。
+
+V1 不定义手机删除本地照片后是否删除服务器原件。客户端不得推断删除语义，也不要自动调用管理员接口。

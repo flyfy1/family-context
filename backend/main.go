@@ -57,8 +57,8 @@ func run() error {
 		Addr:              envOr("ADDR", ":8080"),
 		Handler:           app.routes(),
 		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      90 * time.Second,
+		ReadTimeout:       5 * time.Minute,
+		WriteTimeout:      2 * time.Minute,
 		IdleTimeout:       60 * time.Second,
 	}
 
