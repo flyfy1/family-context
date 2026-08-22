@@ -38,6 +38,7 @@ type Notification struct {
 type CoreJobRunResult struct {
 	RulesEvaluated       int `json:"rulesEvaluated"`
 	AnomaliesDetected    int `json:"anomaliesDetected"`
+	JobsTriggered        int `json:"jobsTriggered"`
 	NotificationsCreated int `json:"notificationsCreated"`
 }
 
@@ -73,7 +74,10 @@ CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications(recipien
 	if err != nil {
 		return err
 	}
-	return ensureCoreJobIncludeTargetColumn(ctx, s.db)
+	if err := ensureCoreJobIncludeTargetColumn(ctx, s.db); err != nil {
+		return err
+	}
+	return s.migrateScheduledJobs(ctx)
 }
 
 func ensureCoreJobIncludeTargetColumn(ctx context.Context, db *sql.DB) error {
@@ -187,6 +191,13 @@ func (s *store) runCoreJobs(ctx context.Context, now time.Time) (CoreJobRunResul
 		}
 		result.NotificationsCreated += created
 	}
+	scheduled, err := s.runScheduledJobs(ctx, now)
+	if err != nil {
+		return result, err
+	}
+	result.RulesEvaluated += scheduled.Evaluated
+	result.JobsTriggered += scheduled.Triggered
+	result.NotificationsCreated += scheduled.NotificationsCreated
 	return result, nil
 }
 
