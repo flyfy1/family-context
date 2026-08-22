@@ -8,8 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 )
 
@@ -81,53 +79,20 @@ Family-visible context:
 家庭可见内容：
 %s`, child.Name, audienceAge, string(contextJSON))
 	}
-	payload := map[string]any{
-		"model": g.model, "store": false, "input": []any{map[string]any{"type": "text", "text": prompt}},
-		"response_format": []any{map[string]any{"type": "text", "mime_type": "application/json", "schema": map[string]any{
-			"type": "object", "properties": map[string]any{
-				"title": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"},
-				"sourceUpdateIds": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			}, "required": []string{"title", "content", "sourceUpdateIds"},
-		}}},
+	schema := map[string]any{
+		"type": "object", "properties": map[string]any{
+			"title": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"},
+			"sourceUpdateIds": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+		}, "required": []string{"title", "content", "sourceUpdateIds"},
 	}
-	body, err := json.Marshal(payload)
-	if err != nil {
+	var draft BedtimeStoryDraft
+	if err := g.generateJSON(ctx, "gemini bedtime story", g.model, []geminiGeneratePart{{Text: prompt}}, schema, &draft, 4<<20); err != nil {
 		return BedtimeStoryDraft{}, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://generativelanguage.googleapis.com/v1beta/interactions", bytes.NewReader(body))
-	if err != nil {
-		return BedtimeStoryDraft{}, err
+	if strings.TrimSpace(draft.Title) == "" || strings.TrimSpace(draft.Content) == "" || len(draft.SourceUpdateIDs) == 0 {
+		return BedtimeStoryDraft{}, errors.New("gemini returned no bedtime story")
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-goog-api-key", g.apiKey)
-	resp, err := g.client.Do(req)
-	if err != nil {
-		return BedtimeStoryDraft{}, fmt.Errorf("gemini bedtime story request: %w", err)
-	}
-	defer resp.Body.Close()
-	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
-	if err != nil {
-		return BedtimeStoryDraft{}, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return BedtimeStoryDraft{}, fmt.Errorf("gemini returned status %d", resp.StatusCode)
-	}
-	var interaction geminiInteractionResponse
-	if err := json.Unmarshal(responseBody, &interaction); err != nil {
-		return BedtimeStoryDraft{}, err
-	}
-	for i := len(interaction.Steps) - 1; i >= 0; i-- {
-		for _, content := range interaction.Steps[i].Content {
-			if content.Type != "text" || content.Text == "" {
-				continue
-			}
-			var draft BedtimeStoryDraft
-			if err := json.Unmarshal([]byte(content.Text), &draft); err == nil && strings.TrimSpace(draft.Title) != "" && strings.TrimSpace(draft.Content) != "" && len(draft.SourceUpdateIDs) > 0 {
-				return draft, nil
-			}
-		}
-	}
-	return BedtimeStoryDraft{}, errors.New("gemini returned no bedtime story")
+	return draft, nil
 }
 
 func (g *geminiAudioProcessor) SynthesizeSpeech(ctx context.Context, text, voice, language string) ([]byte, error) {
@@ -139,59 +104,28 @@ func (g *geminiAudioProcessor) SynthesizeSpeech(ctx context.Context, text, voice
 	if language == "zh" {
 		instruction = "请用温暖、舒缓、自然的普通话，以睡前讲故事的节奏朗读下面全文。不要增加或删改任何内容。\n\n"
 	}
-	payload := map[string]any{
-		"model": model, "store": false,
-		"input":             instruction + text,
-		"response_format":   map[string]any{"type": "audio"},
-		"generation_config": map[string]any{"speech_config": []any{map[string]any{"voice": voice}}},
+	generationConfig := map[string]any{
+		"responseModalities": []string{"AUDIO"},
+		"speechConfig": map[string]any{
+			"voiceConfig": map[string]any{
+				"prebuiltVoiceConfig": map[string]any{"voiceName": voice},
+			},
+		},
 	}
-	body, err := json.Marshal(payload)
+	response, err := g.generateContent(ctx, "gemini TTS", model, []geminiGeneratePart{{Text: instruction + text}}, generationConfig, 32<<20)
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://generativelanguage.googleapis.com/v1beta/interactions", bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-goog-api-key", g.apiKey)
-	resp, err := g.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("gemini TTS request: %w", err)
-	}
-	defer resp.Body.Close()
-	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("gemini TTS returned status %d", resp.StatusCode)
-	}
-	var interaction struct {
-		OutputAudio struct {
-			Data     string `json:"data"`
-			MimeType string `json:"mime_type"`
-		} `json:"output_audio"`
-		Steps []struct {
-			Content []struct {
-				Type     string `json:"type"`
-				Data     string `json:"data"`
-				MimeType string `json:"mime_type"`
-			} `json:"content"`
-		} `json:"steps"`
-	}
-	if err := json.Unmarshal(responseBody, &interaction); err != nil {
-		return nil, err
-	}
-	encoded, mimeType := interaction.OutputAudio.Data, interaction.OutputAudio.MimeType
-	if encoded == "" {
-		for i := len(interaction.Steps) - 1; i >= 0 && encoded == ""; i-- {
-			for _, content := range interaction.Steps[i].Content {
-				if content.Type == "audio" && content.Data != "" {
-					encoded, mimeType = content.Data, content.MimeType
-					break
-				}
+	var encoded, mimeType string
+	for _, candidate := range response.Candidates {
+		for _, part := range candidate.Content.Parts {
+			if part.InlineData != nil && part.InlineData.Data != "" {
+				encoded, mimeType = part.InlineData.Data, part.InlineData.MimeType
+				break
 			}
+		}
+		if encoded != "" {
+			break
 		}
 	}
 	if encoded == "" {
