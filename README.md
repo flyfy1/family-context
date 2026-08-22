@@ -9,7 +9,8 @@ Family Daily V1 正在验证一个最小家庭交流闭环：
 当前仓库包含：
 
 - `backend/`：Go + SQLite 后端；
-- `backend/web/`：由后端直接提供的响应式网页端；
+- `web/`：React + Vite 源码，使用 Hash Routing；
+- `backend/web/`：React 构建产物，由 Go 后端直接提供；
 - `android/`：简单的原生 Android 客户端；
 - `Docs/`：产品和开发文档。
 
@@ -30,7 +31,50 @@ go run .
 
 默认监听 `http://localhost:8080`。本地开发使用 `family-daily-local` 作为临时家庭访问令牌；真实家庭试用前必须替换。
 
-后端启动后，直接在浏览器打开 [http://localhost:8080](http://localhost:8080) 即可使用网页端。网页支持提问、浏览器录音、AI 整理确认、原声播放、重新录制、家庭回复，以及基础家庭称呼配置、状态筛选、转写原文和本地历史浏览。网页配置仅保存在当前浏览器。
+后端启动后，直接在浏览器打开 [http://localhost:8080](http://localhost:8080) 即可使用 React 网页端。
+
+当前网页 PoC 支持：
+
+- 配置多个家庭成员和老人角色；
+- 为每位成员创建独立本地文件 Space；
+- 发布仅自己或家庭可见的文字 Update；
+- 老人通过大按钮录制语音 Update；
+- 浏览家庭 Feed 和个人 Space；
+- 使用 Gemini 生成并保存 Family Daily；
+- 在浏览器中配置远程 Go API 地址和家庭访问令牌。
+
+后端还提供管理员 API、成员级 Bearer Token、成员文字/图片上传、分享 Prompt 配置，以及成员隔离的 MCP Context 接口。详细契约见 [Docs/family-daily-backend-api-v1.md](Docs/family-daily-backend-api-v1.md)。
+
+## 开发 React 网页端
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Vite 开发服务器默认使用 `http://localhost:5173`，并把 API 请求代理到 `http://localhost:8080`。
+
+生成由 Go 后端托管的静态文件：
+
+```bash
+cd web
+npm run build
+```
+
+构建产物写入 `backend/web/` 并嵌入 Go 服务。
+
+## GitHub Pages
+
+前端使用 `#/feed`、`#/space`、`#/elder` 和 `#/settings` 路由，可以部署到任意 GitHub Pages 仓库子路径。
+
+仓库包含 `.github/workflows/pages.yml`。仓库初始化并推送到 GitHub 后，在 **Settings → Pages → Source** 中选择 **GitHub Actions**，之后推送 `main` 分支即可构建和部署。
+
+GitHub Pages 只托管静态 React 前端。部署后需要在网页的“家庭设置”中填写可通过 HTTPS 访问的 Go 后端地址，并在后端配置对应来源：
+
+```dotenv
+CORS_ALLOWED_ORIGINS=https://your-name.github.io
+```
 
 所有权威数据都保存在一个本地存储根目录中：SQLite、原始录音、AI 结果和审计历史不会依赖云端数据库。开发环境默认使用 `backend/data`。
 

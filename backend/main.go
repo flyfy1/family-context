@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -38,7 +39,14 @@ func run() error {
 		return err
 	}
 
-	app := newApp(store, ai, filepath.Join(dataDir, "media"), envOr("FAMILY_API_TOKEN", "family-daily-local"))
+	apiToken := envOr("FAMILY_API_TOKEN", "family-daily-local")
+	if strings.EqualFold(os.Getenv("APP_ENV"), "production") {
+		adminToken := os.Getenv("ADMIN_API_TOKEN")
+		if adminToken == "" || secureEqual(adminToken, apiToken) {
+			return errors.New("production requires ADMIN_API_TOKEN distinct from FAMILY_API_TOKEN")
+		}
+	}
+	app := newApp(store, ai, filepath.Join(dataDir, "media"), apiToken)
 	server := &http.Server{
 		Addr:              envOr("ADDR", ":8080"),
 		Handler:           app.routes(),

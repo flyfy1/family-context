@@ -149,7 +149,12 @@ func scanUpdate(row rowScanner) (Update, error) {
 		return Update{}, err
 	}
 	if audioFile != "" {
-		update.AudioURL = "/space-files/members/" + update.MemberID + "/media/" + audioFile
+		url := "/space-files/members/" + update.MemberID + "/media/" + audioFile
+		if update.Type == "image" {
+			update.MediaURL = url
+		} else {
+			update.AudioURL = url
+		}
 	}
 	var err error
 	update.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt)

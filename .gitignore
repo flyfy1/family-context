@@ -12,4 +12,5 @@ backend/data/
 backend/family-daily
 android/app/build/
 android/build/
-
+web/node_modules/
+web/dist/

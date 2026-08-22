@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -24,12 +25,16 @@ const maxAudioBytes = 18 << 20
 var embeddedWeb embed.FS
 
 type app struct {
-	store      *store
-	ai         audioProcessor
-	summarizer dailySummarizer
-	mediaDir   string
-	spacesRoot string
-	apiToken   string
+	store       *store
+	ai          audioProcessor
+	summarizer  dailySummarizer
+	sharePolicy sharePolicyEvaluator
+	mediaDir    string
+	spacesRoot  string
+	apiToken    string
+	adminToken  string
+	mcpMu       sync.Mutex
+	mcpSessions map[string]string
 }
 
 func newApp(store *store, ai audioProcessor, mediaDir, apiToken string) *app {
@@ -41,7 +46,12 @@ func newApp(store *store, ai audioProcessor, mediaDir, apiToken string) *app {
 	if !ok {
 		summarizer = stubAudioProcessor{}
 	}
-	return &app{store: store, ai: ai, summarizer: summarizer, mediaDir: mediaDir, spacesRoot: spacesRoot, apiToken: apiToken}
+	sharePolicy, ok := ai.(sharePolicyEvaluator)
+	if !ok {
+		sharePolicy = stubAudioProcessor{}
+	}
+	return &app{store: store, ai: ai, summarizer: summarizer, sharePolicy: sharePolicy, mediaDir: mediaDir, spacesRoot: spacesRoot, apiToken: apiToken,
+		adminToken: envOr("ADMIN_API_TOKEN", apiToken), mcpSessions: make(map[string]string)}
 }
 
 func (a *app) routes() http.Handler {
@@ -63,7 +73,22 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/daily-summaries/latest", a.authorized(a.latestDailySummary))
 	mux.HandleFunc("POST /api/v1/daily-summaries/generate", a.authorized(a.generateDailySummary))
 	a.registerJudgmentRoutes(mux)
-	mux.HandleFunc("GET /space-files/{path...}", a.authorized(a.serveSpaceFile))
+	mux.HandleFunc("GET /space-files/{path...}", a.serveSpaceFile)
+	mux.HandleFunc("GET /api/v1/admin/members", a.adminAuthorized(a.adminListMembers))
+	mux.HandleFunc("POST /api/v1/admin/members", a.adminAuthorized(a.adminCreateMember))
+	mux.HandleFunc("PUT /api/v1/admin/members/{id}", a.adminAuthorized(a.adminUpdateMember))
+	mux.HandleFunc("POST /api/v1/admin/members/{id}/token", a.adminAuthorized(a.adminRotateMemberToken))
+	mux.HandleFunc("GET /api/v1/admin/updates", a.adminAuthorized(a.adminListUpdates))
+	mux.HandleFunc("PUT /api/v1/admin/updates/{id}/visibility", a.adminAuthorized(a.adminUpdateVisibility))
+	mux.HandleFunc("GET /api/v1/me", a.memberAuthorized(a.getMe))
+	mux.HandleFunc("GET /api/v1/me/updates", a.memberAuthorized(a.memberListUpdates))
+	mux.HandleFunc("POST /api/v1/me/updates/text", a.memberAuthorized(a.memberCreateTextUpdate))
+	mux.HandleFunc("POST /api/v1/me/updates/image", a.memberAuthorized(a.memberCreateImageUpdate))
+	mux.HandleFunc("GET /api/v1/me/share-policy", a.memberAuthorized(a.getSharePolicy))
+	mux.HandleFunc("PUT /api/v1/me/share-policy", a.memberAuthorized(a.saveSharePolicy))
+	mux.HandleFunc("GET /mcp/members/{id}", a.mcpEndpoint)
+	mux.HandleFunc("POST /mcp/members/{id}", a.mcpEndpoint)
+	mux.HandleFunc("DELETE /mcp/members/{id}", a.mcpEndpoint)
 	webRoot, err := fs.Sub(embeddedWeb, "web")
 	if err != nil {
 		panic(err)
@@ -75,11 +100,15 @@ func (a *app) routes() http.Handler {
 func (a *app) cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
+		if strings.HasPrefix(r.URL.Path, "/mcp/") && origin != "" && !a.originAllowed(origin) {
+			writeMCPError(w, nil, http.StatusForbidden, -32000, "Origin is not allowed")
+			return
+		}
 		if origin != "" && a.originAllowed(origin) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Family-Token")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Family-Token, X-Admin-Token, Mcp-Session-Id, MCP-Protocol-Version")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

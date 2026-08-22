@@ -124,6 +124,19 @@ CREATE TABLE IF NOT EXISTS daily_summaries (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS member_tokens (
+  member_id TEXT PRIMARY KEY REFERENCES members(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS member_settings (
+  member_id TEXT PRIMARY KEY REFERENCES members(id) ON DELETE CASCADE,
+  share_mode TEXT NOT NULL DEFAULT 'manual',
+  share_prompt TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_questions_created_at ON questions(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_replies_answer_id ON replies(answer_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_archived_answers_question_id ON archived_answers(question_id, archived_at DESC);

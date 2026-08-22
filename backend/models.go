@@ -76,10 +76,23 @@ type Update struct {
 	Text       string    `json:"text"`
 	Visibility string    `json:"visibility"`
 	AudioURL   string    `json:"audioUrl,omitempty"`
+	MediaURL   string    `json:"mediaUrl,omitempty"`
 	Transcript string    `json:"transcript,omitempty"`
 	AISummary  string    `json:"aiSummary,omitempty"`
 	Source     string    `json:"source"`
 	CreatedAt  time.Time `json:"createdAt"`
+}
+
+type MemberSettings struct {
+	MemberID    string    `json:"memberId"`
+	ShareMode   string    `json:"shareMode"`
+	SharePrompt string    `json:"sharePrompt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+type MemberCredential struct {
+	Member      Member `json:"member"`
+	AccessToken string `json:"accessToken"`
 }
 
 type DailySummary struct {

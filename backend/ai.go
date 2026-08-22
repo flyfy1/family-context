@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -19,6 +20,15 @@ type audioProcessor interface {
 
 type dailySummarizer interface {
 	Summarize(ctx context.Context, updates []Update, members []Member) (string, error)
+}
+
+type sharePolicyEvaluator interface {
+	EvaluateShare(ctx context.Context, text, prompt string) (ShareDecision, error)
+}
+
+type ShareDecision struct {
+	Allowed bool   `json:"allowed"`
+	Reason  string `json:"reason"`
 }
 
 func newAudioProcessorFromEnv() (audioProcessor, error) {
@@ -47,6 +57,10 @@ func (stubAudioProcessor) Process(_ context.Context, _ []byte, _ string) (AudioR
 
 func (stubAudioProcessor) Summarize(_ context.Context, updates []Update, members []Member) (string, error) {
 	return localDailySummary(updates, members), nil
+}
+
+func (stubAudioProcessor) EvaluateShare(_ context.Context, _ string, prompt string) (ShareDecision, error) {
+	return ShareDecision{Allowed: strings.TrimSpace(prompt) != "", Reason: "stub policy evaluation"}, nil
 }
 
 type geminiAudioProcessor struct {
@@ -205,6 +219,58 @@ func (g *geminiAudioProcessor) Summarize(ctx context.Context, updates []Update, 
 		}
 	}
 	return "", errors.New("gemini returned no daily summary")
+}
+
+func (g *geminiAudioProcessor) EvaluateShare(ctx context.Context, text, prompt string) (ShareDecision, error) {
+	payload := map[string]any{
+		"model": g.model,
+		"store": false,
+		"input": []any{map[string]any{"type": "text", "text": `你是家庭内容分享策略执行器。根据成员自己配置的规则，判断候选内容是否允许自动分享给整个家庭。规则没有明确允许时必须拒绝；不要补充事实。输出 JSON。\n\n成员规则：\n` + prompt + `\n\n候选内容：\n` + text}},
+		"response_format": []any{map[string]any{
+			"type": "text", "mime_type": "application/json",
+			"schema": map[string]any{"type": "object", "properties": map[string]any{
+				"allowed": map[string]any{"type": "boolean"}, "reason": map[string]any{"type": "string"},
+			}, "required": []string{"allowed", "reason"}},
+		}},
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return ShareDecision{}, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://generativelanguage.googleapis.com/v1beta/interactions", bytes.NewReader(body))
+	if err != nil {
+		return ShareDecision{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-goog-api-key", g.apiKey)
+	resp, err := g.client.Do(req)
+	if err != nil {
+		return ShareDecision{}, fmt.Errorf("gemini request: %w", err)
+	}
+	defer resp.Body.Close()
+	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	if err != nil {
+		return ShareDecision{}, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return ShareDecision{}, fmt.Errorf("gemini returned status %d", resp.StatusCode)
+	}
+	var interaction geminiInteractionResponse
+	if err := json.Unmarshal(responseBody, &interaction); err != nil {
+		return ShareDecision{}, err
+	}
+	for i := len(interaction.Steps) - 1; i >= 0; i-- {
+		for _, content := range interaction.Steps[i].Content {
+			if content.Type != "text" {
+				continue
+			}
+			var decision ShareDecision
+			if err := json.Unmarshal([]byte(content.Text), &decision); err == nil && decision.Reason != "" {
+				return decision, nil
+			}
+		}
+	}
+	return ShareDecision{}, errors.New("gemini returned no share decision")
 }
 
 func localDailySummary(updates []Update, members []Member) string {

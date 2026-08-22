@@ -26,7 +26,7 @@ func prepareSpacesRoot(storageRoot string) (string, error) {
 
 func createMemberSpace(spacesRoot string, member Member) error {
 	root := filepath.Join(spacesRoot, "members", member.ID)
-	for _, name := range []string{"private", "updates", "media", "summaries", "jobs"} {
+	for _, name := range []string{"private", "updates", "media", "summaries", "jobs", "context"} {
 		if err := os.MkdirAll(filepath.Join(root, name), 0o750); err != nil {
 			return err
 		}
@@ -48,6 +48,12 @@ func persistUpdateToSpace(spacesRoot string, update Update) error {
 	if update.Transcript != "" && update.Transcript != update.Text {
 		content += "\n## Transcript\n\n" + update.Transcript + "\n"
 	}
+	if update.AudioURL != "" {
+		content += "\nAudio: " + update.AudioURL + "\n"
+	}
+	if update.MediaURL != "" {
+		content += "\nMedia: " + update.MediaURL + "\n"
+	}
 	if err := writeFileAtomically(memberDir, update.ID+".md", []byte(content)); err != nil {
 		return err
 	}
@@ -59,6 +65,14 @@ func persistUpdateToSpace(spacesRoot string, update Update) error {
 		return writeFileAtomically(filepath.Join(spacesRoot, "shared", "updates"), update.ID+".json", append(sharedData, '\n'))
 	}
 	return nil
+}
+
+func persistMemberSettings(spacesRoot string, settings MemberSettings) error {
+	data, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return err
+	}
+	return writeFileAtomically(filepath.Join(spacesRoot, "members", settings.MemberID), "share-policy.json", append(data, '\n'))
 }
 
 func persistSummaryToSpace(spacesRoot string, summary DailySummary) error {

@@ -281,6 +281,15 @@ func (a *app) serveSpaceFile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "没有找到这个文件")
 		return
 	}
+	allowed := secureEqual(r.Header.Get("X-Family-Token"), a.apiToken) || secureEqual(r.Header.Get("X-Admin-Token"), a.adminToken)
+	if !allowed {
+		member, ok := a.authenticateMember(r)
+		allowed = ok && member.ID == parts[1]
+	}
+	if !allowed {
+		writeError(w, http.StatusUnauthorized, "无权读取这个成员的文件")
+		return
+	}
 	path := filepath.Join(a.spacesRoot, filepath.FromSlash(requested))
 	rootPrefix := filepath.Clean(a.spacesRoot) + string(os.PathSeparator)
 	if !strings.HasPrefix(filepath.Clean(path), rootPrefix) {

@@ -8,11 +8,15 @@
 - Do not move authoritative family data to a hosted database or object store without an explicit product decision.
 - Gemini may process an audio request, but requests must remain stateless and all durable source audio, transcripts, summaries, versions, and audit events remain local.
 - User-facing removal and retention need explicit semantics. V1 draft re-recording archives the previous local revision for traceability; a future permanent-erasure flow must delete all corresponding local revisions and media.
+- Each member Space is isolated under `spaces/members/<member-id>`. Member and MCP credentials must never authorize another member's private files.
+- MCP file tools are confined to the authenticated member's `context/` directory. Do not expose the storage root, NAS mount, arbitrary filesystem paths, or shell execution through MCP.
+- Production admin credentials must be distinct from family and member credentials. Member tokens are stored only as hashes and plaintext is returned only when issued or rotated.
 
 ## MVP boundary
 
 - Preserve the V1 question → voice answer → AI organization → confirmation → reply loop.
 - Do not add distributed storage, queues, sync, NAS dependencies, or replication before real family usage requires them.
+- A mounted NAS may be the configured production storage root, but capacity is not a substitute for backups, mount validation, or recovery testing.
 
 ## Work logs
 
