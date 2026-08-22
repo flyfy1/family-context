@@ -5,11 +5,12 @@ import "./styles.css";
 const FAMILY_ID = "our-family";
 const ROUTES = ["/feed", "/space", "/elder", "/settings"];
 const colors = ["#AD4C34", "#54706A", "#B47A3C", "#715A75", "#607D4F", "#35677B"];
+const DEFAULT_API_BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
 
 function loadConfig() {
   return {
     familyName: localStorage.getItem("fd.familyName") || "我们的家",
-    apiBase: (localStorage.getItem("fd.apiBase") || "").replace(/\/$/, ""),
+    apiBase: (localStorage.getItem("fd.apiBase") || DEFAULT_API_BASE).replace(/\/$/, ""),
     token: localStorage.getItem("fd.token") || "family-daily-local",
   };
 }
