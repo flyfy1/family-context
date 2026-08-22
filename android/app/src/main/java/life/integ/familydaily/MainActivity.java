@@ -45,6 +45,7 @@ import java.util.concurrent.Executors;
 public class MainActivity extends android.app.Activity {
     private static final int RECORD_AUDIO_REQUEST = 42;
     private static final int PHOTO_ACCESS_REQUEST = 43;
+    private static final int NOTIFICATION_ACCESS_REQUEST = 44;
     private static final int COLOR_BACKGROUND = Color.rgb(255, 249, 244);
     private static final int COLOR_CARD = Color.WHITE;
     private static final int COLOR_PRIMARY = Color.rgb(185, 79, 50);
@@ -89,6 +90,9 @@ public class MainActivity extends android.app.Activity {
         if (MemberProfileSettings.ELDER.equals(profile.role)) loadDailySummary();
         else if (!MemberProfileSettings.CHILD.equals(profile.role)) loadFeed();
         PhotoSync.schedule(this);
+        NotificationSync.schedule(this);
+        ensureNotificationPermission();
+        NotificationSync.syncNow(this);
         refreshPhotoSyncStatus();
     }
 
@@ -96,11 +100,18 @@ public class MainActivity extends android.app.Activity {
     protected void onResume() {
         super.onResume();
         if (session == null || !session.isAuthenticated()) return;
+        NotificationSync.syncNow(this);
         refreshPhotoSyncStatus();
         if (PhotoSync.preferences(this).getBoolean(PhotoSync.KEY_ENABLED, false)
                 && PhotoSync.isConfigured(this) && PhotoSync.hasImageAccess(this)) {
             PhotoSync.syncNow(this);
             pollPhotoSyncStatus(0);
+        }
+    }
+
+    private void ensureNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, NOTIFICATION_ACCESS_REQUEST);
         }
     }
 
@@ -833,7 +844,9 @@ public class MainActivity extends android.app.Activity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == RECORD_AUDIO_REQUEST && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED && pendingDailyRecordButton != null) {
+        if (requestCode == NOTIFICATION_ACCESS_REQUEST) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) NotificationSync.syncNow(this);
+        } else if (requestCode == RECORD_AUDIO_REQUEST && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED && pendingDailyRecordButton != null) {
             Button button = pendingDailyRecordButton;
             pendingDailyRecordButton = null;
             startDailyRecording(button);
