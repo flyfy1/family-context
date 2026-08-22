@@ -280,3 +280,33 @@ func TestAdminBroadcastNotificationCreatesMemberScopedHTTPSActions(t *testing.T)
 		t.Fatalf("attention was not dismissed: members=%+v err=%v", members, err)
 	}
 }
+
+func TestMigrationBackfillsEnglishForExistingDefaultDemoNotification(t *testing.T) {
+	databasePath := filepath.Join(t.TempDir(), "test.db")
+	store, err := openStore(databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	member := Member{ID: "elder", FamilyID: defaultFamilyID, Name: "外婆", Role: "elder", CreatedAt: now}
+	if err := store.createMember(context.Background(), member); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`INSERT INTO notifications(id, family_id, recipient_member_id, subject_member_id, type, title, message, action_url, incident_key, created_at)
+		VALUES('old-demo', ?, ?, ?, 'demo_broadcast', ?, ?, 'https://family.integ.life/#/feed', 'old-incident', ?)`,
+		defaultFamilyID, member.ID, member.ID, defaultDemoTitle, defaultDemoMessage, now.Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, err = openStore(databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close() })
+	notifications, err := store.listNotifications(context.Background(), defaultFamilyID, member.ID)
+	if err != nil || len(notifications) != 1 || notifications[0].TitleEN != defaultDemoTitleEN || notifications[0].MessageEN != defaultDemoMessageEN {
+		t.Fatalf("backfilled notifications=%+v err=%v", notifications, err)
+	}
+}

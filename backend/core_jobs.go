@@ -48,6 +48,13 @@ type CoreJobRunResult struct {
 	NotificationsCreated int `json:"notificationsCreated"`
 }
 
+const (
+	defaultDemoTitle     = "家里想你了"
+	defaultDemoTitleEN   = "We miss you"
+	defaultDemoMessage   = "好几天没有看到新的家庭动态，点这里看看家人的近况。"
+	defaultDemoMessageEN = "There haven't been any new family updates for a few days. Tap to see how everyone is doing."
+)
+
 func (s *store) migrateCoreJobs(ctx context.Context) error {
 	_, err := s.db.ExecContext(ctx, `
 CREATE TABLE IF NOT EXISTS core_job_rules (
@@ -94,6 +101,11 @@ CREATE TABLE IF NOT EXISTS core_job_rule_recipients (
 		return err
 	}
 	if err := ensureNotificationDeliveryColumns(ctx, s.db); err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(ctx, `UPDATE notifications SET title_en = ?, message_en = ?
+		WHERE type = 'demo_broadcast' AND title = ? AND message = ? AND (title_en = '' OR message_en = '')`,
+		defaultDemoTitleEN, defaultDemoMessageEN, defaultDemoTitle, defaultDemoMessage); err != nil {
 		return err
 	}
 	return s.migrateScheduledJobs(ctx)
