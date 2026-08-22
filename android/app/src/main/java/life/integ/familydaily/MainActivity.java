@@ -62,10 +62,12 @@ public class MainActivity extends android.app.Activity {
     private MediaRecorder recorder;
     private File recordingFile;
     private JSONObject pendingRecordQuestion;
+    private String language;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        language = LanguageSettings.get(this);
         setContentView(buildScreen());
         loadFeed();
         PhotoSync.schedule(this);
@@ -102,31 +104,45 @@ public class MainActivity extends android.app.Activity {
 
         TextView eyebrow = text("FAMILY DAILY · V1", 13, COLOR_PRIMARY);
         root.addView(eyebrow);
-        TextView title = text("把一句关心，\n变成一次对话", 30, COLOR_TEXT);
+        TextView title = text(tr("Turn one caring question\ninto a conversation", "把一句关心，\n变成一次对话"), 30, COLOR_TEXT);
         title.setPadding(0, dp(8), 0, dp(8));
         root.addView(title);
-        TextView intro = text("先问爸爸一个具体的问题。他只需要点一下按钮，就能用语音回答。", 16, COLOR_MUTED);
+        TextView intro = text(tr("Ask Dad one specific question. He can answer by voice with a single tap.", "先问爸爸一个具体的问题。他只需要点一下按钮，就能用语音回答。"), 16, COLOR_MUTED);
         intro.setLineSpacing(0, 1.25f);
         root.addView(intro);
+
+        LinearLayout languageCard = card();
+        languageCard.setPadding(dp(18), dp(18), dp(18), dp(18));
+        LinearLayout.LayoutParams languageCardParams = fullWidth();
+        languageCardParams.setMargins(0, dp(24), 0, 0);
+        root.addView(languageCard, languageCardParams);
+        languageCard.addView(text(tr("Settings", "设置"), 20, COLOR_TEXT));
+        TextView languageIntro = text(tr("Language", "语言"), 13, COLOR_MUTED);
+        languageIntro.setPadding(0, dp(8), 0, dp(8));
+        languageCard.addView(languageIntro);
+        Button languageButton = secondaryButton(LanguageSettings.CHINESE.equals(language) ? "中文" : "English");
+        languageButton.setContentDescription(tr("Choose app language", "选择 App 语言"));
+        languageButton.setOnClickListener(v -> showLanguageSettings());
+        languageCard.addView(languageButton, fullWidth());
 
         LinearLayout syncCard = card();
         syncCard.setPadding(dp(18), dp(18), dp(18), dp(18));
         LinearLayout.LayoutParams syncCardParams = fullWidth();
         syncCardParams.setMargins(0, dp(24), 0, 0);
         root.addView(syncCard, syncCardParams);
-        syncCard.addView(text("照片自动备份", 20, COLOR_TEXT));
-        TextView syncIntro = text("授权后，现有和新照片会在打开 App 时补同步，并由系统定期同步到你的私人 NAS 空间。", 14, COLOR_MUTED);
+        syncCard.addView(text(tr("Automatic photo backup", "照片自动备份"), 20, COLOR_TEXT));
+        TextView syncIntro = text(tr("After permission is granted, existing and new photos sync to your private NAS Space when the app opens and on a system schedule.", "授权后，现有和新照片会在打开 App 时补同步，并由系统定期同步到你的私人 NAS 空间。"), 14, COLOR_MUTED);
         syncIntro.setLineSpacing(0, 1.2f);
         syncIntro.setPadding(0, dp(8), 0, dp(12));
         syncCard.addView(syncIntro);
-        photoSyncStatus = text("尚未配置", 14, COLOR_MUTED);
+        photoSyncStatus = text(tr("Not configured", "尚未配置"), 14, COLOR_MUTED);
         photoSyncStatus.setPadding(0, 0, 0, dp(10));
         syncCard.addView(photoSyncStatus);
         LinearLayout syncActions = new LinearLayout(this);
-        Button configure = secondaryButton("连接 NAS");
+        Button configure = secondaryButton(tr("Connect NAS", "连接 NAS"));
         configure.setOnClickListener(v -> showPhotoSyncSettings());
         syncActions.addView(configure, new LinearLayout.LayoutParams(0, dp(52), 1));
-        photoSyncButton = primaryButton("开启同步");
+        photoSyncButton = primaryButton(tr("Enable sync", "开启同步"));
         LinearLayout.LayoutParams syncButtonParams = new LinearLayout.LayoutParams(0, dp(52), 1);
         syncButtonParams.setMargins(dp(10), 0, 0, 0);
         photoSyncButton.setOnClickListener(v -> enableOrSyncPhotos());
@@ -138,10 +154,10 @@ public class MainActivity extends android.app.Activity {
         LinearLayout.LayoutParams cardParams = fullWidth();
         cardParams.setMargins(0, dp(24), 0, dp(22));
         root.addView(askCard, cardParams);
-        askCard.addView(text("问爸爸一个问题", 20, COLOR_TEXT));
+        askCard.addView(text(tr("Ask Dad a question", "问爸爸一个问题"), 20, COLOR_TEXT));
 
         questionInput = new EditText(this);
-        questionInput.setHint("例如：老张后来去医院了吗？");
+        questionInput.setHint(tr("For example: Did your friend make it to the doctor?", "例如：老张后来去医院了吗？"));
         questionInput.setTextSize(16);
         questionInput.setMinHeight(dp(54));
         questionInput.setPadding(dp(14), dp(10), dp(14), dp(10));
@@ -152,14 +168,14 @@ public class MainActivity extends android.app.Activity {
         inputParams.setMargins(0, dp(14), 0, dp(12));
         askCard.addView(questionInput, inputParams);
 
-        Button askButton = primaryButton("发送问题");
+        Button askButton = primaryButton(tr("Send question", "发送问题"));
         askButton.setOnClickListener(v -> createQuestion());
         askCard.addView(askButton, fullWidth());
 
         LinearLayout heading = new LinearLayout(this);
         heading.setGravity(Gravity.CENTER_VERTICAL);
-        heading.addView(text("家庭动态", 22, COLOR_TEXT), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        Button refresh = secondaryButton("刷新");
+        heading.addView(text(tr("Family activity", "家庭动态"), 22, COLOR_TEXT), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        Button refresh = secondaryButton(tr("Refresh", "刷新"));
         refresh.setOnClickListener(v -> loadFeed());
         heading.addView(refresh);
         root.addView(heading, fullWidth());
@@ -171,7 +187,7 @@ public class MainActivity extends android.app.Activity {
         progressParams.setMargins(0, dp(16), 0, dp(8));
         root.addView(progress, progressParams);
 
-        status = text("正在连接家庭空间……", 14, COLOR_MUTED);
+        status = text(tr("Connecting to the family Space…", "正在连接家庭空间……"), 14, COLOR_MUTED);
         status.setGravity(Gravity.CENTER);
         status.setPadding(0, dp(12), 0, dp(4));
         root.addView(status, fullWidth());
@@ -184,10 +200,10 @@ public class MainActivity extends android.app.Activity {
     private void createQuestion() {
         String text = questionInput.getText().toString().trim();
         if (text.isEmpty()) {
-            questionInput.setError("先写下你想问的问题");
+            questionInput.setError(tr("Write the question you want to ask", "先写下你想问的问题"));
             return;
         }
-        setBusy(true, "正在发送问题……");
+        setBusy(true, tr("Sending question…", "正在发送问题……"));
         executor.execute(() -> {
             try {
                 JSONObject body = new JSONObject()
@@ -198,7 +214,7 @@ public class MainActivity extends android.app.Activity {
                 request("POST", "/api/v1/questions", body);
                 runOnUiThread(() -> {
                     questionInput.setText("");
-                    Toast.makeText(this, "问题已经准备好", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, tr("Your question is ready", "问题已经准备好"), Toast.LENGTH_SHORT).show();
                 });
                 loadFeedInBackground();
             } catch (Exception error) {
@@ -208,7 +224,7 @@ public class MainActivity extends android.app.Activity {
     }
 
     private void loadFeed() {
-        setBusy(true, "正在读取家庭动态……");
+        setBusy(true, tr("Loading family activity…", "正在读取家庭动态……"));
         executor.execute(this::loadFeedInBackground);
     }
 
@@ -223,7 +239,7 @@ public class MainActivity extends android.app.Activity {
     }
 
     private void renderFeed(JSONArray questions) {
-        setBusy(false, questions.length() == 0 ? "还没有问题。先从一句具体的关心开始吧。" : "");
+        setBusy(false, questions.length() == 0 ? tr("No questions yet. Start with one specific thing you care about.", "还没有问题。先从一句具体的关心开始吧。") : "");
         feedContainer.removeAllViews();
         for (int i = 0; i < questions.length(); i++) {
             JSONObject question = questions.optJSONObject(i);
@@ -236,7 +252,7 @@ public class MainActivity extends android.app.Activity {
     private View buildQuestionCard(JSONObject question) {
         LinearLayout card = card();
         card.setPadding(dp(18), dp(18), dp(18), dp(18));
-        TextView meta = text(question.optString("askedBy") + " 想问 " + question.optString("askedTo"), 13, COLOR_PRIMARY);
+        TextView meta = text(tr(question.optString("askedBy") + " wants to ask " + question.optString("askedTo"), question.optString("askedBy") + " 想问 " + question.optString("askedTo")), 13, COLOR_PRIMARY);
         card.addView(meta);
         TextView questionText = text(question.optString("text"), 20, COLOR_TEXT);
         questionText.setLineSpacing(0, 1.18f);
@@ -245,7 +261,7 @@ public class MainActivity extends android.app.Activity {
 
         JSONObject answer = question.optJSONObject("answer");
         if (answer == null) {
-            Button record = primaryButton("🎙  回答这个问题");
+            Button record = primaryButton(tr("🎙  Answer this question", "🎙  回答这个问题"));
             record.setMinHeight(dp(58));
             record.setTextSize(18);
             record.setOnClickListener(v -> beginRecording(question, record));
@@ -255,33 +271,33 @@ public class MainActivity extends android.app.Activity {
 
         String answerStatus = answer.optString("status");
         if ("processing_failed".equals(answerStatus)) {
-            card.addView(infoBox(answer.optString("errorMessage", "AI 整理失败，原始录音已经保存。")));
-            Button retry = secondaryButton("重新录制");
+            card.addView(infoBox(answer.optString("errorMessage", tr("AI processing failed. The original recording was saved.", "AI 整理失败，原始录音已经保存。"))));
+            Button retry = secondaryButton(tr("Record again", "重新录制"));
             retry.setOnClickListener(v -> deleteDraft(answer.optString("id"), question));
             card.addView(retry, fullWidth());
             return card;
         }
 
-        TextView label = text("AI 整理", 12, COLOR_MUTED);
+        TextView label = text(tr("AI SUMMARY", "AI 整理"), 12, COLOR_MUTED);
         card.addView(label);
         TextView summary = text(answer.optString("aiSummary"), 17, COLOR_TEXT);
         summary.setLineSpacing(0, 1.22f);
         summary.setPadding(0, dp(5), 0, dp(12));
         card.addView(summary);
 
-        Button play = secondaryButton("▶  播放原声");
+        Button play = secondaryButton(tr("▶  Play original", "▶  播放原声"));
         play.setOnClickListener(v -> playAudio(answer.optString("audioUrl"), play));
         card.addView(play, fullWidth());
 
         if ("ready".equals(answerStatus)) {
-            TextView draft = text("只有你能看到这份草稿。确认后才会分享给家人。", 13, COLOR_MUTED);
+            TextView draft = text(tr("Only you can see this draft. It is shared with family only after you confirm.", "只有你能看到这份草稿。确认后才会分享给家人。"), 13, COLOR_MUTED);
             draft.setPadding(0, dp(12), 0, dp(10));
             card.addView(draft);
             LinearLayout actions = new LinearLayout(this);
-            Button retry = secondaryButton("重新录制");
+            Button retry = secondaryButton(tr("Record again", "重新录制"));
             retry.setOnClickListener(v -> deleteDraft(answer.optString("id"), question));
             actions.addView(retry, new LinearLayout.LayoutParams(0, dp(52), 1));
-            Button publish = primaryButton("确认分享");
+            Button publish = primaryButton(tr("Confirm sharing", "确认分享"));
             LinearLayout.LayoutParams publishParams = new LinearLayout.LayoutParams(0, dp(52), 1);
             publishParams.setMargins(dp(10), 0, 0, 0);
             publish.setOnClickListener(v -> publishAnswer(answer.optString("id")));
@@ -290,7 +306,7 @@ public class MainActivity extends android.app.Activity {
         } else if ("shared".equals(answerStatus)) {
             JSONArray replies = question.optJSONArray("replies");
             if (replies != null && replies.length() > 0) {
-                TextView repliesTitle = text("家人的回复", 13, COLOR_MUTED);
+                TextView repliesTitle = text(tr("Family replies", "家人的回复"), 13, COLOR_MUTED);
                 repliesTitle.setPadding(0, dp(16), 0, dp(4));
                 card.addView(repliesTitle);
                 for (int i = 0; i < replies.length(); i++) {
@@ -303,7 +319,7 @@ public class MainActivity extends android.app.Activity {
                 }
             }
             EditText replyInput = new EditText(this);
-            replyInput.setHint("写一句回复……");
+            replyInput.setHint(tr("Write a reply…", "写一句回复……"));
             replyInput.setTextSize(15);
             replyInput.setSingleLine(true);
             replyInput.setBackground(rounded(Color.rgb(248, 242, 237), dp(10)));
@@ -311,11 +327,35 @@ public class MainActivity extends android.app.Activity {
             LinearLayout.LayoutParams replyParams = fullWidth();
             replyParams.setMargins(0, dp(12), 0, dp(8));
             card.addView(replyInput, replyParams);
-            Button replyButton = secondaryButton("回复爸爸");
+            Button replyButton = secondaryButton(tr("Reply to Dad", "回复爸爸"));
             replyButton.setOnClickListener(v -> createReply(answer.optString("id"), replyInput));
             card.addView(replyButton, fullWidth());
         }
         return card;
+    }
+
+    private void showLanguageSettings() {
+        if (recorder != null) {
+            Toast.makeText(this, tr("Finish the recording before changing language", "请先结束录音，再切换语言"), Toast.LENGTH_LONG).show();
+            return;
+        }
+        String[] labels = {"English", "中文"};
+        int selected = LanguageSettings.CHINESE.equals(language) ? 1 : 0;
+        new AlertDialog.Builder(this)
+                .setTitle(tr("App language", "App 语言"))
+                .setSingleChoiceItems(labels, selected, (dialog, which) -> {
+                    String next = which == 1 ? LanguageSettings.CHINESE : LanguageSettings.ENGLISH;
+                    if (!next.equals(language)) {
+                        LanguageSettings.set(this, next);
+                        PhotoSync.preferences(this).edit().remove(PhotoSync.KEY_STATUS).apply();
+                        dialog.dismiss();
+                        recreate();
+                    } else {
+                        dialog.dismiss();
+                    }
+                })
+                .setNegativeButton(tr("Cancel", "取消"), null)
+                .show();
     }
 
     private void beginRecording(JSONObject question, Button button) {
@@ -332,9 +372,9 @@ public class MainActivity extends android.app.Activity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == RECORD_AUDIO_REQUEST && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED && pendingRecordQuestion != null) {
             loadFeed();
-            Toast.makeText(this, "权限已开启，请再次点击录音按钮", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, tr("Microphone access is on. Tap the record button again.", "权限已开启，请再次点击录音按钮"), Toast.LENGTH_LONG).show();
         } else if (requestCode == RECORD_AUDIO_REQUEST) {
-            Toast.makeText(this, "需要麦克风权限才能回答", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, tr("Microphone access is required to answer", "需要麦克风权限才能回答"), Toast.LENGTH_LONG).show();
         } else if (requestCode == PHOTO_ACCESS_REQUEST) {
             if (PhotoSync.hasImageAccess(this)) {
                 PhotoSync.preferences(this).edit().putBoolean(PhotoSync.KEY_ENABLED, true).apply();
@@ -344,7 +384,7 @@ public class MainActivity extends android.app.Activity {
                 pollPhotoSyncStatus(0);
             } else {
                 refreshPhotoSyncStatus();
-                Toast.makeText(this, "需要允许照片访问才能自动同步；你也可以只授权选中的照片", Toast.LENGTH_LONG).show();
+                Toast.makeText(this, tr("Photo access is required for automatic sync; you may also allow selected photos only.", "需要允许照片访问才能自动同步；你也可以只授权选中的照片"), Toast.LENGTH_LONG).show();
             }
         }
     }
@@ -355,29 +395,29 @@ public class MainActivity extends android.app.Activity {
         int padding = dp(20);
         fields.setPadding(padding, 0, padding, 0);
         EditText baseUrl = new EditText(this);
-        baseUrl.setHint("NAS 服务地址，例如 https://family.example.com");
+        baseUrl.setHint(tr("NAS service address, for example https://family.example.com", "NAS 服务地址，例如 https://family.example.com"));
         baseUrl.setSingleLine(true);
         baseUrl.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
         baseUrl.setText(prefs.getString(PhotoSync.KEY_BASE_URL, ""));
         fields.addView(baseUrl, fullWidth());
         EditText token = new EditText(this);
-        token.setHint("成员令牌");
+        token.setHint(tr("Member token", "成员令牌"));
         token.setSingleLine(true);
         token.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         token.setText(prefs.getString(PhotoSync.KEY_MEMBER_TOKEN, ""));
         fields.addView(token, fullWidth());
         EditText lookbackDays = new EditText(this);
-        lookbackDays.setHint("同步最近多少天（1-3650）");
+        lookbackDays.setHint(tr("Days of photos to sync (1–3650)", "同步最近多少天（1-3650）"));
         lookbackDays.setSingleLine(true);
         lookbackDays.setInputType(InputType.TYPE_CLASS_NUMBER);
         lookbackDays.setText(Integer.toString(PhotoSync.lookbackDays(this)));
         fields.addView(lookbackDays, fullWidth());
         AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("连接你的私人空间")
-                .setMessage("地址必须是手机能访问的 Family Daily 服务；令牌只保存在此 App 的私有数据中。")
+                .setTitle(tr("Connect your private Space", "连接你的私人空间"))
+                .setMessage(tr("The address must be a Family Daily service reachable from this phone. The token stays in this app's private storage.", "地址必须是手机能访问的 Family Daily 服务；令牌只保存在此 App 的私有数据中。"))
                 .setView(fields)
-                .setNegativeButton("取消", null)
-                .setPositiveButton("保存", null)
+                .setNegativeButton(tr("Cancel", "取消"), null)
+                .setPositiveButton(tr("Save", "保存"), null)
                 .create();
         dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             String url = MediaUploadClient.trimTrailingSlash(baseUrl.getText().toString());
@@ -389,11 +429,11 @@ public class MainActivity extends android.app.Activity {
                 days = 0;
             }
             if (!MediaUploadClient.isValidBaseUrl(url) || memberToken.isEmpty()) {
-                Toast.makeText(this, "请填写完整的 http(s) 地址和成员令牌", Toast.LENGTH_LONG).show();
+                Toast.makeText(this, tr("Enter a complete http(s) address and member token", "请填写完整的 http(s) 地址和成员令牌"), Toast.LENGTH_LONG).show();
                 return;
             }
             if (!PhotoSyncWindow.isValidDays(days)) {
-                Toast.makeText(this, "同步范围请输入 1 到 3650 天", Toast.LENGTH_LONG).show();
+                Toast.makeText(this, tr("Enter a sync range from 1 to 3650 days", "同步范围请输入 1 到 3650 天"), Toast.LENGTH_LONG).show();
                 return;
             }
             String oldUrl = prefs.getString(PhotoSync.KEY_BASE_URL, "");
@@ -404,7 +444,7 @@ public class MainActivity extends android.app.Activity {
                     .putString(PhotoSync.KEY_MEMBER_TOKEN, memberToken)
                     .putInt(PhotoSync.KEY_LOOKBACK_DAYS, days)
                     .putBoolean(PhotoSync.KEY_ENABLED, true)
-                    .putString(PhotoSync.KEY_STATUS, "连接已保存；将同步最近 " + days + " 天的照片");
+                    .putString(PhotoSync.KEY_STATUS, tr("Connection saved; photos from the last " + days + " days will sync", "连接已保存；将同步最近 " + days + " 天的照片"));
             if (!url.equals(oldUrl) || !memberToken.equals(oldToken) || days != oldDays
                     || !prefs.contains(PhotoSync.KEY_LOOKBACK_DAYS)) {
                 edit.putLong(PhotoSync.KEY_CURSOR_SECONDS, 0).putLong(PhotoSync.KEY_CURSOR_ID, 0);
@@ -427,7 +467,7 @@ public class MainActivity extends android.app.Activity {
             return;
         }
         PhotoSync.preferences(this).edit().putBoolean(PhotoSync.KEY_ENABLED, true)
-                .putString(PhotoSync.KEY_STATUS, "已交给系统开始同步……").apply();
+                .putString(PhotoSync.KEY_STATUS, tr("Sync has been handed to the system…", "已交给系统开始同步……")).apply();
         PhotoSync.schedule(this);
         PhotoSync.syncNow(this);
         refreshPhotoSyncStatus();
@@ -440,11 +480,11 @@ public class MainActivity extends android.app.Activity {
         boolean configured = PhotoSync.isConfigured(this);
         boolean access = PhotoSync.hasImageAccess(this);
         String value = prefs.getString(PhotoSync.KEY_STATUS, "");
-        if (!configured) value = "尚未连接 NAS 服务";
-        else if (!access) value = "将同步最近 " + PhotoSync.lookbackDays(this) + " 天；请允许照片访问";
-        else if (value == null || value.isEmpty()) value = "已开启；将同步最近 " + PhotoSync.lookbackDays(this) + " 天";
+        if (!configured) value = tr("NAS service is not connected", "尚未连接 NAS 服务");
+        else if (!access) value = tr("Photos from the last " + PhotoSync.lookbackDays(this) + " days will sync; allow photo access", "将同步最近 " + PhotoSync.lookbackDays(this) + " 天；请允许照片访问");
+        else if (value == null || value.isEmpty()) value = tr("Enabled; photos from the last " + PhotoSync.lookbackDays(this) + " days will sync", "已开启；将同步最近 " + PhotoSync.lookbackDays(this) + " 天");
         photoSyncStatus.setText(value);
-        photoSyncButton.setText(configured && access ? "立即同步" : "开启同步");
+        photoSyncButton.setText(configured && access ? tr("Sync now", "立即同步") : tr("Enable sync", "开启同步"));
     }
 
     private void pollPhotoSyncStatus(int attempt) {
@@ -467,13 +507,13 @@ public class MainActivity extends android.app.Activity {
             recorder.setOutputFile(recordingFile.getAbsolutePath());
             recorder.prepare();
             recorder.start();
-            button.setText("■  结束并上传");
+            button.setText(tr("■  Stop and upload", "■  结束并上传"));
             button.setBackground(rounded(Color.rgb(117, 45, 35), dp(14)));
             button.setOnClickListener(v -> stopAndUpload(question));
-            Toast.makeText(this, "正在录音，请自然地说话", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, tr("Recording — speak naturally", "正在录音，请自然地说话"), Toast.LENGTH_SHORT).show();
         } catch (Exception error) {
             releaseRecorder();
-            Toast.makeText(this, "暂时无法开始录音", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, tr("Unable to start recording", "暂时无法开始录音"), Toast.LENGTH_LONG).show();
         }
     }
 
@@ -483,12 +523,12 @@ public class MainActivity extends android.app.Activity {
         } catch (RuntimeException tooShort) {
             releaseRecorder();
             if (recordingFile != null) recordingFile.delete();
-            Toast.makeText(this, "录音太短，请再说一次", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, tr("The recording was too short. Please try again.", "录音太短，请再说一次"), Toast.LENGTH_LONG).show();
             loadFeed();
             return;
         }
         releaseRecorder();
-        setBusy(true, "正在保存录音并整理内容……");
+        setBusy(true, tr("Saving and organizing the recording…", "正在保存录音并整理内容……"));
         File file = recordingFile;
         executor.execute(() -> {
             try {
@@ -527,7 +567,7 @@ public class MainActivity extends android.app.Activity {
     }
 
     private void publishAnswer(String answerId) {
-        setBusy(true, "正在分享给家人……");
+        setBusy(true, tr("Sharing with family…", "正在分享给家人……"));
         executor.execute(() -> {
             try {
                 request("POST", "/api/v1/answers/" + answerId + "/publish", new JSONObject());
@@ -540,11 +580,11 @@ public class MainActivity extends android.app.Activity {
 
     private void deleteDraft(String answerId, JSONObject question) {
         new AlertDialog.Builder(this)
-                .setTitle("重新录制？")
-                .setMessage("当前录音会从家庭草稿中移除，并作为本地历史版本保留。")
-                .setNegativeButton("取消", null)
-                .setPositiveButton("归档并重录", (dialog, which) -> {
-                    setBusy(true, "正在删除草稿……");
+                .setTitle(tr("Record again?", "重新录制？"))
+                .setMessage(tr("The current recording will be removed from the family draft and retained as a local historical version.", "当前录音会从家庭草稿中移除，并作为本地历史版本保留。"))
+                .setNegativeButton(tr("Cancel", "取消"), null)
+                .setPositiveButton(tr("Archive and record again", "归档并重录"), (dialog, which) -> {
+                    setBusy(true, tr("Removing draft…", "正在删除草稿……"));
                     executor.execute(() -> {
                         try {
                             request("POST", "/api/v1/answers/" + answerId + "/archive", new JSONObject());
@@ -559,10 +599,10 @@ public class MainActivity extends android.app.Activity {
     private void createReply(String answerId, EditText input) {
         String text = input.getText().toString().trim();
         if (text.isEmpty()) {
-            input.setError("先写一句回复");
+            input.setError(tr("Write a reply first", "先写一句回复"));
             return;
         }
-        setBusy(true, "正在发送回复……");
+        setBusy(true, tr("Sending reply…", "正在发送回复……"));
         executor.execute(() -> {
             try {
                 request("POST", "/api/v1/answers/" + answerId + "/replies", new JSONObject().put("authorId", "洋宇").put("text", text));
@@ -575,34 +615,34 @@ public class MainActivity extends android.app.Activity {
 
     private void playAudio(String path, Button button) {
         button.setEnabled(false);
-        button.setText("正在加载原声……");
+        button.setText(tr("Loading original audio…", "正在加载原声……"));
         MediaPlayer player = new MediaPlayer();
         try {
             Map<String, String> headers = new HashMap<>();
             headers.put("X-Family-Token", BuildConfig.FAMILY_API_TOKEN);
             player.setDataSource(this, android.net.Uri.parse(BuildConfig.API_BASE_URL + path), headers);
             player.setOnPreparedListener(mediaPlayer -> {
-                button.setText("正在播放……");
+                button.setText(tr("Playing…", "正在播放……"));
                 mediaPlayer.start();
             });
             player.setOnCompletionListener(mediaPlayer -> {
                 mediaPlayer.release();
                 button.setEnabled(true);
-                button.setText("▶  播放原声");
+                button.setText(tr("▶  Play original", "▶  播放原声"));
             });
             player.setOnErrorListener((mediaPlayer, what, extra) -> {
                 mediaPlayer.release();
                 button.setEnabled(true);
-                button.setText("▶  播放原声");
-                Toast.makeText(this, "暂时无法播放原声", Toast.LENGTH_LONG).show();
+                button.setText(tr("▶  Play original", "▶  播放原声"));
+                Toast.makeText(this, tr("Unable to play the original audio", "暂时无法播放原声"), Toast.LENGTH_LONG).show();
                 return true;
             });
             player.prepareAsync();
         } catch (Exception error) {
             player.release();
             button.setEnabled(true);
-            button.setText("▶  播放原声");
-            Toast.makeText(this, "暂时无法播放原声", Toast.LENGTH_LONG).show();
+            button.setText(tr("▶  Play original", "▶  播放原声"));
+            Toast.makeText(this, tr("Unable to play the original audio", "暂时无法播放原声"), Toast.LENGTH_LONG).show();
         }
     }
 
@@ -624,6 +664,7 @@ public class MainActivity extends android.app.Activity {
         connection.setConnectTimeout(10_000);
         connection.setReadTimeout(90_000);
         connection.setRequestProperty("Accept", "application/json");
+        connection.setRequestProperty("Accept-Language", language);
         connection.setRequestProperty("X-Family-Token", BuildConfig.FAMILY_API_TOKEN);
         return connection;
     }
@@ -642,7 +683,7 @@ public class MainActivity extends android.app.Activity {
         }
         String response = bytes.toString(StandardCharsets.UTF_8.name());
         if (statusCode < 200 || statusCode >= 300) {
-            String message = "请求失败（" + statusCode + "）";
+            String message = tr("Request failed (" + statusCode + ")", "请求失败（" + statusCode + "）");
             try { message = new JSONObject(response).optString("error", message); } catch (Exception ignored) {}
             throw new IllegalStateException(message);
         }
@@ -651,8 +692,8 @@ public class MainActivity extends android.app.Activity {
 
     private void showError(Exception error) {
         runOnUiThread(() -> {
-            setBusy(false, "暂时无法完成：" + error.getMessage());
-            Toast.makeText(this, "请确认后端正在运行，然后重试", Toast.LENGTH_LONG).show();
+            setBusy(false, tr("Unable to complete: ", "暂时无法完成：") + error.getMessage());
+            Toast.makeText(this, tr("Make sure the backend is running, then try again", "请确认后端正在运行，然后重试"), Toast.LENGTH_LONG).show();
         });
     }
 
@@ -668,6 +709,10 @@ public class MainActivity extends android.app.Activity {
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
         return layout;
+    }
+
+    private String tr(String english, String chinese) {
+        return LanguageSettings.text(language, english, chinese);
     }
 
     private LinearLayout card() {
