@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
+import LandingPage from "./LandingPage";
 
 const FAMILY_ID = "our-family";
-const ROUTES = ["/feed", "/space", "/elder", "/settings"];
+const ROUTES = ["/", "/feed", "/space", "/elder", "/settings"];
 const colors = ["#AD4C34", "#54706A", "#B47A3C", "#715A75", "#607D4F", "#35677B"];
 const DEFAULT_API_BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
 
@@ -17,10 +18,9 @@ function loadConfig() {
 }
 
 function useHashRoute() {
-  const read = () => ROUTES.includes(location.hash.slice(1)) ? location.hash.slice(1) : "/feed";
+  const read = () => ROUTES.includes(location.hash.slice(1) || "/") ? (location.hash.slice(1) || "/") : "/";
   const [route, setRoute] = useState(read);
   useEffect(() => {
-    if (!location.hash) location.hash = "/feed";
     const change = () => setRoute(read());
     addEventListener("hashchange", change);
     return () => removeEventListener("hashchange", change);
@@ -37,11 +37,13 @@ function App() {
   const [error, setError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [toast, setToast] = useState("");
+  const [landingLanguage, setLandingLanguage] = useState(localStorage.getItem("fd.language") === "en" ? "en" : "zh");
 
   const api = useMemo(() => createAPI(config), [config]);
   const currentMember = members.find(member => member.id === currentMemberId) || members[0] || null;
 
   useEffect(() => {
+    if (route === "/") { setLoading(false); return; }
     let active = true;
     setLoading(true);
     api("/api/v1/members")
@@ -53,7 +55,7 @@ function App() {
       .catch(err => active && setError(err.message))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
-  }, [api, refreshKey]);
+  }, [api, refreshKey, route]);
 
   useEffect(() => {
     if (!currentMemberId && members[0]) setCurrentMemberId(members[0].id);
@@ -64,6 +66,11 @@ function App() {
     if (currentMemberId) localStorage.setItem("fd.currentMember", currentMemberId);
   }, [currentMemberId]);
 
+  useEffect(() => {
+    localStorage.setItem("fd.language", landingLanguage);
+    document.documentElement.lang = landingLanguage === "zh" ? "zh-CN" : "en";
+  }, [landingLanguage]);
+
   function notify(message) {
     setToast(message);
     window.clearTimeout(notify.timer);
@@ -73,6 +80,8 @@ function App() {
   function refresh() { setRefreshKey(value => value + 1); }
 
   const pageProps = { api, members, currentMember, notify, refreshKey, refresh };
+
+  if (route === "/") return <LandingPage language={landingLanguage} onLanguageChange={setLandingLanguage} />;
 
   return <div className="app-shell">
     <Sidebar route={route} familyName={config.familyName} />
