@@ -59,7 +59,7 @@ func (a *app) listMCPSessions(w http.ResponseWriter, r *http.Request, member Mem
 		writeError(w, http.StatusInternalServerError, "暂时无法读取 MCP 会话")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"sessions": sessions, "serverUrl": mcpServerURL(r, member.ID)})
+	writeJSON(w, http.StatusOK, map[string]any{"sessions": sessions, "serverUrl": mcpServerURL(r, member.ID), "tools": memberMCPTools()})
 }
 
 func (a *app) createMCPSession(w http.ResponseWriter, r *http.Request, member Member) {
