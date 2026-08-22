@@ -275,13 +275,19 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
 .policy-boundary { margin: 0; padding: 11px 13px; border-radius: 10px; color: var(--muted); background: rgba(97,114,105,.08); font-size: 10px; line-height: 1.6; }
 .policy-loading { min-height: 210px; display: grid; place-items: center; color: var(--muted); font-size: 11px; }
 .mcp-panel { display: grid; gap: 16px; }
+.mcp-setup-intro { padding: 13px 15px; border-left: 3px solid var(--rust); border-radius: 0 10px 10px 0; background: rgba(173,76,52,.06); }
+.mcp-setup-intro strong { font-size: 12px; }.mcp-setup-intro p { margin: 4px 0 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
 .mcp-create { display: flex; align-items: end; gap: 10px; }
 .mcp-create label { flex: 1; display: grid; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 700; }
 .mcp-create input { width: 100%; min-height: 43px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; outline: 0; color: var(--ink); background: #faf6f0; }
 .mcp-create input:focus { border-color: var(--rust); box-shadow: 0 0 0 4px rgba(173,76,52,.08); }
-.mcp-empty, .mcp-credential, .mcp-connect-guide { padding: 15px; border-radius: 12px; background: #faf6f0; }
-.mcp-empty p, .mcp-credential p, .mcp-connect-guide p { margin: 6px 0 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
-.mcp-connect-guide { display: grid; gap: 9px; border: 1px solid rgba(84,112,106,.2); background: rgba(97,114,105,.07); }.mcp-connect-guide > strong { font-size: 12px; }
+.mcp-empty, .mcp-credential { padding: 15px; border-radius: 12px; background: #faf6f0; }
+.mcp-empty p, .mcp-credential p { margin: 6px 0 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
+.mcp-client-guides { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.mcp-client-guide { min-width: 0; display: grid; align-content: start; gap: 11px; padding: 15px; border: 1px solid rgba(84,112,106,.2); border-radius: 12px; background: rgba(97,114,105,.06); }
+.mcp-guide-heading { display: flex; align-items: center; gap: 9px; }.mcp-guide-heading > span { width: 29px; height: 29px; display: grid; place-items: center; border-radius: 50%; color: white; background: var(--sage); font-size: 9px; font-weight: 800; }.mcp-guide-heading > div { display: grid; gap: 2px; }.mcp-guide-heading strong { font-size: 12px; }.mcp-guide-heading small { color: var(--muted); font-size: 9px; }
+.mcp-client-guide ol, .mcp-recovery ul { margin: 0; padding-left: 19px; color: var(--muted); font-size: 10px; line-height: 1.55; }.mcp-client-guide li + li, .mcp-recovery li + li { margin-top: 6px; }
+.mcp-client-guide p { margin: 0; color: var(--muted); font-size: 9px; line-height: 1.6; }.mcp-client-guide .mcp-guide-waiting { padding: 9px 10px; border-radius: 8px; background: white; }
 .mcp-credential { display: grid; gap: 11px; border: 1px solid rgba(173,76,52,.24); background: #fbefe8; }
 .mcp-credential > strong { color: var(--rust-dark); font-size: 12px; }
 .mcp-credential label { display: grid; gap: 5px; color: var(--muted); font-size: 10px; font-weight: 700; }
@@ -295,6 +301,7 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
 .mcp-session button { min-height: 31px; }.mcp-session button:disabled { opacity: .5; }
 .mcp-none { margin: 0; padding: 16px; border: 1px dashed var(--line); border-radius: 10px; color: var(--muted); text-align: center; font-size: 10px; }
 .mcp-boundary { margin: 0; padding: 10px 12px; border-radius: 10px; color: var(--muted); background: rgba(97,114,105,.08); font-size: 9px; line-height: 1.6; word-break: break-all; }
+.mcp-recovery { padding: 12px 14px; border: 1px dashed var(--line); border-radius: 10px; color: var(--muted); }.mcp-recovery summary { cursor: pointer; color: var(--ink); font-size: 11px; font-weight: 750; }.mcp-recovery ul { margin-top: 11px; }
 .future-boundary { padding: 20px 24px; border: 1px dashed rgba(62,48,40,.2); border-radius: 16px; color: var(--muted); }
 .future-boundary strong { color: var(--ink); font-size: 12px; }.future-boundary p { margin: 6px 0 0; font-size: 11px; line-height: 1.65; }
 
@@ -348,7 +355,7 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
   .record-orb { width: 190px; height: 190px; }
   .settings-section { grid-template-columns: 1fr; gap: 22px; padding: 22px; }.tree-nodes { justify-content: flex-start; overflow-x: auto; padding-bottom: 5px; }.tree-nodes::before { left: 56px; right: 56px; }.tree-node { min-width: 108px; }.add-member { grid-template-columns: 1fr; }.add-member .primary-button, .settings-form .primary-button { width: 100%; }
   .share-policy-form fieldset { grid-template-columns: 1fr; }.share-policy-form fieldset span { min-height: 64px; }.policy-actions { align-items: stretch; flex-direction: column-reverse; }.policy-actions button { width: 100%; }
-  .mcp-create { align-items: stretch; flex-direction: column; }.mcp-create .primary-button { width: 100%; }.copy-row { flex-direction: column; }.copy-row button { min-height: 36px; }
+  .mcp-create { align-items: stretch; flex-direction: column; }.mcp-create .primary-button { width: 100%; }.mcp-client-guides { grid-template-columns: 1fr; }.copy-row { flex-direction: column; }.copy-row button { min-height: 36px; }
 }
 
 @media (max-width: 430px) {

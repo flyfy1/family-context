@@ -564,17 +564,40 @@ function MCPSessionSettings({ api, config, member, notify }) {
     catch { notify(tx("Copy failed; select the text manually", "复制失败，请手动选择文本")); }
   }
 
-  const claudeCommand = credential ? `claude mcp add --transport http family-daily-${member.name} ${credential.serverUrl} --header "Authorization: Bearer ${credential.accessToken}"` : "";
+  const clientName = `family-daily-${member.id.slice(0, 8)}`;
+  const claudeCommand = credential ? `claude mcp add --transport http ${clientName} ${credential.serverUrl} --header "Authorization: Bearer ${credential.accessToken}"` : "";
   const activeSessions = sessions.filter(session => !session.revokedAt && new Date(session.expiresAt) > new Date());
   return <section className="settings-section mcp-settings card">
     <div><p className="eyebrow">MEMBER MCP</p><div className="policy-member"><Avatar member={member} /><div><h2>{tx(`${member.name}'s AI connection`, `${member.name}的 AI 连接`)}</h2><span>{tx("45-day member session", "45 天成员会话")}</span></div></div><p className="muted-copy">{tx("Each client gets its own revocable session and can reach only this member's context files. Switch identity to manage another member.", "每个客户端使用独立、可撤销的会话，并且只能访问这个成员的 context 文件。切换身份即可管理其他成员。")}</p></div>
     <div className="mcp-panel">
-      {!canManage ? <div className="mcp-empty"><strong>{tx("Administrator token required", "需要管理员令牌")}</strong><p>{tx("Add the separate administrator token in Connection settings, save, then return here to issue member credentials.", "请先在连接设置中填写独立管理员令牌并保存，再回来签发成员凭证。")}</p></div> : <>
+      <div className="mcp-setup-intro"><strong>{tx("Before connecting", "连接前确认")}</strong><p>{tx(`You are configuring ${member.name}. Create a separate session for every family member and every client; never reuse one member's credential for another.`, `当前配置的是${member.name}。每位家庭成员、每个客户端都要创建独立会话；不要把一个成员的凭证复用给另一个成员。`)}</p></div>
+      {!canManage ? <div className="mcp-empty"><strong>{tx("Step 1 · Add the administrator token", "第 1 步 · 填写管理员令牌")}</strong><p>{tx("Add the separate administrator token in Connection settings above and save. Return here to create the selected member's credential; the family access token cannot issue MCP sessions.", "请在上方连接设置中填写独立管理员令牌并保存，然后回来为当前成员创建凭证；家庭访问令牌不能签发 MCP 会话。")}</p></div> : <>
         <form className="mcp-create" onSubmit={create}><label>{tx("Session name", "会话名称")}<input value={label} maxLength="80" onChange={event => setLabel(event.target.value)} placeholder={tx("Claude Code on Mac", "Mac 上的 Claude Code")} required /></label><button className="primary-button" disabled={busy}>{busy ? tx("Creating…", "正在创建…") : tx("Create 45-day session", "创建 45 天会话")}</button></form>
-        {serverUrl && <div className="mcp-connect-guide"><strong>ChatGPT OAuth</strong><div className="copy-row"><code>{serverUrl}</code><button type="button" onClick={() => copy(serverUrl)}>{tx("Copy endpoint", "复制地址")}</button></div><p>{tx("Create a custom MCP app with this endpoint and choose OAuth. Use a newly created session token below when Family Daily asks you to authorize. ChatGPT receives a one-hour access token plus a rotating 60-day refresh session.", "用这个地址创建 ChatGPT 自定义 MCP 应用并选择 OAuth。Family Daily 请求授权时，使用下方新创建的会话令牌。ChatGPT 会获得一小时访问令牌，以及可轮换的 60 天刷新会话。")}</p></div>}
+        <div className="mcp-client-guides">
+          <article className="mcp-client-guide">
+            <div className="mcp-guide-heading"><span>01</span><div><strong>ChatGPT</strong><small>{tx("OAuth connection", "OAuth 连接")}</small></div></div>
+            <ol>
+              <li>{tx("Create a named 45-day session above and save the one-time token.", "在上方创建有名称的 45 天会话，并保存只显示一次的令牌。")}</li>
+              <li>{tx("In ChatGPT, open Settings → Security and login, then enable Developer mode.", "在 ChatGPT 打开设置 → 安全与登录，然后开启开发者模式。")}</li>
+              <li>{tx("Open ChatGPT Plugins, select +, and paste this server endpoint.", "打开 ChatGPT Plugins，点击 +，并粘贴下面的服务器地址。")}</li>
+            </ol>
+            {serverUrl && <div className="copy-row"><code>{serverUrl}</code><button type="button" onClick={() => copy(serverUrl)}>{tx("Copy endpoint", "复制地址")}</button></div>}
+            <p>{tx("When Family Daily opens its authorization page, paste the saved session token. Then test in a new chat: “List my context files.” ChatGPT uses a one-hour access token and a rotating 60-day refresh session.", "Family Daily 打开授权页面时，粘贴保存好的会话令牌。然后在新对话中测试：“列出我的 context 文件”。ChatGPT 使用一小时访问令牌和可轮换的 60 天刷新会话。")}</p>
+          </article>
+          <article className="mcp-client-guide">
+            <div className="mcp-guide-heading"><span>02</span><div><strong>Claude Code</strong><small>{tx("Bearer token connection", "Bearer 令牌连接")}</small></div></div>
+            <ol>
+              <li>{tx("Create a named 45-day session above. The ready-to-run command appears with its one-time token.", "在上方创建有名称的 45 天会话；包含一次性令牌的可运行命令随后会出现。")}</li>
+              <li>{tx("Copy the generated command and run it in Terminal on the computer that uses Claude Code.", "复制生成的命令，并在使用 Claude Code 的电脑终端里运行。")}</li>
+              <li>{tx("Run “claude mcp list” or open “/mcp” in Claude Code, then ask it to list the context files.", "运行“claude mcp list”或在 Claude Code 中打开“/mcp”，再让它列出 context 文件。")}</li>
+            </ol>
+            {!credential && <p className="mcp-guide-waiting">{tx("Create a session to reveal the command.", "创建会话后会显示命令。")}</p>}
+          </article>
+        </div>
         {credential && <div className="mcp-credential"><strong>{tx("Save this token now — it will not be shown again", "请立即保存令牌——之后不会再次显示")}</strong><div className="copy-row"><code>{credential.accessToken}</code><button type="button" onClick={() => copy(credential.accessToken)}>{tx("Copy token", "复制令牌")}</button></div><label>Claude Code<div className="copy-row"><code>{claudeCommand}</code><button type="button" onClick={() => copy(claudeCommand)}>{tx("Copy command", "复制命令")}</button></div></label><p>{tx("This same token can be pasted into the Family Daily OAuth consent page for ChatGPT.", "同一个令牌也可以粘贴到 Family Daily 的 ChatGPT OAuth 授权页面。")}</p></div>}
         <div className="mcp-session-list"><div className="mcp-list-title"><strong>{tx("Active sessions", "有效会话")}</strong><span>{loading ? tx("Loading…", "读取中…") : activeSessions.length}</span></div>{!loading && activeSessions.length === 0 ? <p className="mcp-none">{tx("No active client sessions", "暂无有效的客户端会话")}</p> : activeSessions.map(session => <div className="mcp-session" key={session.id}><div><strong>{session.label}</strong><span>{tx("Expires", "到期")} {new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en-US", { dateStyle: "medium" }).format(new Date(session.expiresAt))}</span></div><button type="button" disabled={busy} onClick={() => revoke(session.id)}>{tx("Revoke", "撤销")}</button></div>)}</div>
         {serverUrl && <p className="mcp-boundary">{tx("Filesystem boundary:", "文件边界：")} <code>spaces/members/{member.id}/context</code> · {tx("no storage root, shell, or cross-member access", "不开放存储根目录、Shell 或跨成员访问")}</p>}
+        <details className="mcp-recovery"><summary>{tx("Connection failed? Check these items", "连接失败？检查这些项目")}</summary><ul><li>{tx("401 or login failed: the session may be expired, revoked, or belong to another member. Revoke it and create a new session for the selected member.", "401 或登录失败：会话可能已过期、被撤销，或属于其他成员。请撤销后为当前成员创建新会话。")}</li><li>{tx("ChatGPT cannot reach the endpoint: the backend must use a public HTTPS address.", "ChatGPT 无法访问地址：后端必须使用公网 HTTPS 地址。")}</li><li>{tx("Claude shows pending approval: open Claude Code in the trusted workspace and approve the server in /mcp.", "Claude 显示等待批准：在可信工作区中打开 Claude Code，并在 /mcp 中批准服务器。")}</li><li>{tx("Unexpected files: disconnect immediately and verify the selected family identity before issuing a fresh session.", "看到了不属于预期的文件：立即断开连接，确认当前家庭身份后重新签发会话。")}</li></ul></details>
       </>}
     </div>
   </section>;
