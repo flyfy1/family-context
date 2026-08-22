@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6efe7">
+  <title>Family Daily</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="page-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Family Daily 首页">
+        <span class="brand-mark" aria-hidden="true">家</span>
+        <span>Family Daily</span>
+      </a>
+      <div class="header-actions">
+        <div class="connection"><span class="connection-dot"></span><span id="family-name-label">我们的家</span> · 本地空间</div>
+        <button id="settings-button" class="icon-button" type="button" aria-label="打开家庭设置">⚙</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">SPEAK · SHARE · REMEMBER</p>
+          <h1>把一句关心，<br>变成一次对话。</h1>
+          <p class="hero-intro">问爸爸一个具体的问题。他只需要按下录音，就能把今天的故事留给家人。</p>
+        </div>
+        <div class="memory-orbit" aria-hidden="true">
+          <div class="orbit-card orbit-photo">🌳</div>
+          <div class="orbit-card orbit-voice"><span>声</span><i></i><i></i><i></i></div>
+          <div class="orbit-center">每一天<br><strong>都值得记住</strong></div>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <aside class="ask-panel panel">
+          <div class="section-number">01</div>
+          <p class="eyebrow">发起对话</p>
+          <h2>今天想问爸爸什么？</h2>
+          <form id="question-form">
+            <label for="question-input">你的问题</label>
+            <textarea id="question-input" maxlength="300" rows="4" placeholder="例如：老张后来去医院了吗？" required></textarea>
+            <div class="prompt-chips" aria-label="问题示例">
+              <button type="button" data-prompt="今天有什么开心的事吗？">今天开心吗？</button>
+              <button type="button" data-prompt="最近还和老朋友见面吗？">老朋友</button>
+              <button type="button" data-prompt="你年轻时最难忘的一次旅行是哪里？">以前的故事</button>
+            </div>
+            <button class="button button-primary button-wide" type="submit">发送给爸爸 <span>→</span></button>
+          </form>
+          <p class="privacy-note"><span aria-hidden="true">⌂</span> 长期数据保存在本机；录音会发送给 Gemini 做一次性整理。</p>
+        </aside>
+
+        <section class="feed-panel">
+          <div class="feed-heading">
+            <div>
+              <p class="eyebrow">家庭动态</p>
+              <h2>最近的对话</h2>
+            </div>
+            <button id="refresh-button" class="button button-quiet" type="button" aria-label="刷新家庭动态">↻ 刷新</button>
+          </div>
+          <div id="feed-filters" class="feed-filters" aria-label="筛选家庭动态">
+            <button class="active" type="button" data-filter="all">全部 <span>0</span></button>
+            <button type="button" data-filter="pending">待回答 <span>0</span></button>
+            <button type="button" data-filter="ready">待确认 <span>0</span></button>
+            <button type="button" data-filter="shared">已分享 <span>0</span></button>
+          </div>
+          <div id="status" class="status" role="status">正在连接家庭空间……</div>
+          <div id="feed" class="feed" aria-live="polite"></div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <dialog id="settings-dialog" class="dialog">
+    <form id="settings-form" method="dialog">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">本机设置</p><h2>家庭空间配置</h2></div>
+        <button class="dialog-close" type="button" data-close-settings aria-label="关闭设置">×</button>
+      </div>
+      <p class="dialog-intro">这些称呼只保存在当前浏览器，用来让试用过程更像真实家庭。</p>
+      <div class="form-grid">
+        <label>家庭名称<input id="family-name-input" maxlength="30" required></label>
+        <label>我的称呼<input id="member-name-input" maxlength="20" required></label>
+        <label>老人称呼<input id="elder-name-input" maxlength="20" required></label>
+        <label class="full-field">家庭访问令牌<input id="token-input" type="password" autocomplete="off" required></label>
+      </div>
+      <div class="dialog-actions"><button class="button button-quiet" type="button" data-close-settings>取消</button><button class="button button-primary" id="save-settings" type="submit">保存配置</button></div>
+      <p class="privacy-note">长期数据保存在本机；录音会发送给 Gemini 做一次性转写和整理。</p>
+    </form>
+  </dialog>
+
+  <dialog id="history-dialog" class="dialog history-dialog">
+    <div class="dialog-heading">
+      <div><p class="eyebrow">本地回溯</p><h2>回答历史</h2></div>
+      <button class="dialog-close" data-close-history aria-label="关闭历史">×</button>
+    </div>
+    <div id="history-content" class="history-content"></div>
+  </dialog>
+</body>
+</html>

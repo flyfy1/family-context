@@ -1,0 +1,15 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+.agent-machine.env
+.idea/
+*.iml
+.gradle/
+local.properties
+backend/data/
+/data/
+backend/family-daily
+android/app/build/
+android/build/
+
