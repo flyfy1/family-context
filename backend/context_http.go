@@ -135,6 +135,70 @@ func (a *app) createTextUpdate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, update)
 }
 
+func (a *app) createImageUpdate(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxImageBytes+(1<<20))
+	if err := r.ParseMultipartForm(maxImageBytes); err != nil {
+		writeError(w, http.StatusBadRequest, "图片过大或上传格式不正确")
+		return
+	}
+	familyID := strings.TrimSpace(r.FormValue("familyId"))
+	if familyID == "" {
+		familyID = defaultFamilyID
+	}
+	memberID := strings.TrimSpace(r.FormValue("memberId"))
+	visibility := strings.TrimSpace(r.FormValue("visibility"))
+	caption := strings.TrimSpace(r.FormValue("text"))
+	if !validVisibility(visibility) || len([]rune(caption)) > 2000 {
+		writeError(w, http.StatusBadRequest, "图片说明或可见范围不正确")
+		return
+	}
+	if exists, err := a.store.memberExists(r.Context(), memberID, familyID); err != nil || !exists {
+		writeError(w, http.StatusBadRequest, "没有找到这个家庭成员")
+		return
+	}
+	file, header, err := r.FormFile("image")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "请选择一张图片")
+		return
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, maxImageBytes+1))
+	if err != nil || len(data) == 0 || len(data) > maxImageBytes {
+		writeError(w, http.StatusBadRequest, "图片为空或超过 25MB")
+		return
+	}
+	mimeType := strings.Split(header.Header.Get("Content-Type"), ";")[0]
+	if mimeType == "" || mimeType == "application/octet-stream" {
+		mimeType = http.DetectContentType(data)
+	}
+	extension, ok := imageExtension(mimeType)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "只支持 JPEG、PNG、WebP 或 GIF 图片")
+		return
+	}
+	updateID := newID()
+	fileName := updateID + extension
+	mediaDir := filepath.Join(a.spacesRoot, "members", memberID, "media")
+	if err := writeFileAtomically(mediaDir, fileName, data); err != nil {
+		writeError(w, http.StatusInternalServerError, "暂时无法保存图片")
+		return
+	}
+	if caption == "" {
+		caption = "分享了一张照片"
+	}
+	update := Update{ID: updateID, FamilyID: familyID, MemberID: memberID, Type: "image", Text: caption,
+		Visibility: visibility, MediaURL: "/space-files/members/" + memberID + "/media/" + fileName, Source: "member_image", CreatedAt: time.Now().UTC()}
+	if err := persistUpdateToSpace(a.spacesRoot, update); err != nil {
+		writeError(w, http.StatusInternalServerError, "图片已保存，但暂时无法写入成员记录")
+		return
+	}
+	if err := a.store.createUpdate(r.Context(), update, fileName); err != nil {
+		writeError(w, http.StatusInternalServerError, "图片已保存，但暂时无法更新索引")
+		return
+	}
+	writeJSON(w, http.StatusCreated, update)
+}
+
 func (a *app) createVoiceUpdate(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxAudioBytes+(1<<20))
 	if err := r.ParseMultipartForm(maxAudioBytes); err != nil {

@@ -70,6 +70,7 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/members", a.authorized(a.createMember))
 	mux.HandleFunc("GET /api/v1/updates", a.authorized(a.listUpdates))
 	mux.HandleFunc("POST /api/v1/updates", a.authorized(a.createTextUpdate))
+	mux.HandleFunc("POST /api/v1/updates/image", a.authorized(a.createImageUpdate))
 	mux.HandleFunc("POST /api/v1/updates/voice", a.authorized(a.createVoiceUpdate))
 	mux.HandleFunc("GET /api/v1/daily-summaries/latest", a.authorized(a.latestDailySummary))
 	mux.HandleFunc("POST /api/v1/daily-summaries/generate", a.authorized(a.generateDailySummary))

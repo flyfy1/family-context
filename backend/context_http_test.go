@@ -131,6 +131,62 @@ func TestVoiceUpdateIsStoredInMemberSpace(t *testing.T) {
 	}
 }
 
+func TestImageUpdateIsStoredAndReadableFromWebFlow(t *testing.T) {
+	t.Parallel()
+	temp := t.TempDir()
+	store, err := openStore(filepath.Join(temp, "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close() })
+	server := httptest.NewServer(newApp(store, stubAudioProcessor{}, filepath.Join(temp, "media"), "test-token").routes())
+	t.Cleanup(server.Close)
+	member := requestJSON[Member](t, server.Client(), http.MethodPost, server.URL+"/api/v1/members", map[string]string{
+		"familyId": defaultFamilyID, "name": "孩子", "role": "member", "color": "#B47A3C",
+	}, http.StatusCreated)
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	_ = writer.WriteField("familyId", defaultFamilyID)
+	_ = writer.WriteField("memberId", member.ID)
+	_ = writer.WriteField("visibility", "family")
+	_ = writer.WriteField("text", "今天画了一只宇宙猫。")
+	part, err := writer.CreateFormFile("image", "space-cat.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = part.Write([]byte("\x89PNG\r\n\x1a\nminimal"))
+	_ = writer.Close()
+	req, _ := http.NewRequest(http.MethodPost, server.URL+"/api/v1/updates/image", &body)
+	req.Header.Set("X-Family-Token", "test-token")
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	resp, err := server.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("image update status = %d", resp.StatusCode)
+	}
+	var update Update
+	if err := json.NewDecoder(resp.Body).Decode(&update); err != nil {
+		t.Fatal(err)
+	}
+	if update.Type != "image" || update.MediaURL == "" || update.Text != "今天画了一只宇宙猫。" {
+		t.Fatalf("unexpected image update: %+v", update)
+	}
+	imageReq, _ := http.NewRequest(http.MethodGet, server.URL+update.MediaURL, nil)
+	imageReq.Header.Set("X-Family-Token", "test-token")
+	imageResp, err := server.Client().Do(imageReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer imageResp.Body.Close()
+	if imageResp.StatusCode != http.StatusOK {
+		t.Fatalf("image status = %d", imageResp.StatusCode)
+	}
+}
+
 func TestDevelopmentCORSAllowsVite(t *testing.T) {
 	t.Parallel()
 	temp := t.TempDir()

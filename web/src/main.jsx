@@ -144,16 +144,32 @@ function FamilyFeed({ api, members, currentMember, notify, refreshKey }) {
 
 function Composer({ api, currentMember, notify, onCreated }) {
   const [text, setText] = useState("");
+  const [image, setImage] = useState(null);
   const [visibility, setVisibility] = useState("family");
   const [busy, setBusy] = useState(false);
+  const inputRef = useRef(null);
+  const previewURL = useMemo(() => image ? URL.createObjectURL(image) : "", [image]);
+  useEffect(() => () => { if (previewURL) URL.revokeObjectURL(previewURL); }, [previewURL]);
   if (!currentMember) return null;
   async function submit(event) {
     event.preventDefault();
-    if (!text.trim()) return;
+    if (!text.trim() && !image) return;
     setBusy(true);
     try {
-      await api("/api/v1/updates", { method: "POST", body: JSON.stringify({ familyId: FAMILY_ID, memberId: currentMember.id, text: text.trim(), visibility }) });
+      if (image) {
+        const body = new FormData();
+        body.append("familyId", FAMILY_ID);
+        body.append("memberId", currentMember.id);
+        body.append("visibility", visibility);
+        body.append("text", text.trim());
+        body.append("image", image, image.name);
+        await api("/api/v1/updates/image", { method: "POST", body });
+      } else {
+        await api("/api/v1/updates", { method: "POST", body: JSON.stringify({ familyId: FAMILY_ID, memberId: currentMember.id, text: text.trim(), visibility }) });
+      }
       setText("");
+      setImage(null);
+      if (inputRef.current) inputRef.current.value = "";
       notify(visibility === "family" ? "已经分享给家人" : "已经保存到你的 Space");
       await onCreated();
     } catch (error) { notify(error.message); }
@@ -162,9 +178,13 @@ function Composer({ api, currentMember, notify, onCreated }) {
   return <form className="composer card" onSubmit={submit}>
     <div className="composer-person"><Avatar member={currentMember} /><div><strong>{currentMember.name}</strong><span>分享一个生活片段</span></div></div>
     <textarea value={text} onChange={event => setText(event.target.value)} maxLength="2000" placeholder="今天发生了什么？写几句话就好……" aria-label="新的家庭动态" />
+    {previewURL && <div className="image-preview"><img src={previewURL} alt="待发布图片预览" /><button type="button" onClick={() => { setImage(null); if (inputRef.current) inputRef.current.value = ""; }}>移除图片</button></div>}
     <div className="composer-actions">
-      <Visibility value={visibility} onChange={setVisibility} />
-      <button className="primary-button" disabled={busy || !text.trim()}>{busy ? "正在保存…" : "发布 Update"}</button>
+      <div className="composer-options">
+        <Visibility value={visibility} onChange={setVisibility} />
+        <label className="image-picker">▧ 添加照片<input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" aria-label="选择一张照片" onChange={event => setImage(event.target.files?.[0] || null)} /></label>
+      </div>
+      <button className="primary-button" disabled={busy || (!text.trim() && !image)}>{busy ? "正在保存…" : image ? "发布照片" : "发布 Update"}</button>
     </div>
   </form>;
 }
@@ -176,12 +196,28 @@ function Visibility({ value, onChange, large = false }) {
 function UpdateCard({ update, member, api, notify }) {
   const [showTranscript, setShowTranscript] = useState(false);
   return <article className="update-card card">
-    <div className="update-meta"><Avatar member={member} /><div><strong>{member?.name || "家庭成员"}</strong><span>{formatTime(update.createdAt)} · {update.visibility === "private" ? "仅自己" : "家庭可见"}</span></div><span className="update-type">{update.type === "voice" ? "语音" : "文字"}</span></div>
+    <div className="update-meta"><Avatar member={member} /><div><strong>{member?.name || "家庭成员"}</strong><span>{formatTime(update.createdAt)} · {update.visibility === "private" ? "仅自己" : "家庭可见"}</span></div><span className="update-type">{update.type === "voice" ? "语音" : update.type === "image" ? "照片" : "文字"}</span></div>
     <p className="update-text">{update.text}</p>
+    {update.type === "image" && update.mediaUrl && <ImageAttachment path={update.mediaUrl} api={api} notify={notify} />}
     {update.type === "voice" && <div className="voice-actions"><AudioButton path={update.audioUrl} api={api} notify={notify} />{update.transcript && <button className="text-button" onClick={() => setShowTranscript(value => !value)}>{showTranscript ? "收起转写" : "查看转写"}</button>}</div>}
     {showTranscript && <div className="transcript"><small>语音转写</small>{update.transcript}</div>}
     <div className="update-footer"><span>♡</span><span>来自 {update.source === "member_voice" ? "语音记录" : "成员分享"}</span></div>
   </article>;
+}
+
+function ImageAttachment({ path, api, notify }) {
+  const [url, setURL] = useState("");
+  useEffect(() => {
+    let active = true;
+    let objectURL = "";
+    api(path, { raw: true }).then(blob => {
+      if (!active) return;
+      objectURL = URL.createObjectURL(blob);
+      setURL(objectURL);
+    }).catch(error => notify(error.message));
+    return () => { active = false; if (objectURL) URL.revokeObjectURL(objectURL); };
+  }, [api, path]);
+  return url ? <img className="update-image" src={url} alt="家庭成员分享的照片" /> : <div className="image-loading">正在打开照片…</div>;
 }
 
 function MemberSpace({ api, members, currentMember, notify, refreshKey }) {

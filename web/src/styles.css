@@ -65,7 +65,13 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
 .avatar.large { width: 80px; height: 80px; font-size: 32px; }
 .composer textarea { width: 100%; min-height: 96px; margin: 18px 0 12px; padding: 0; border: 0; outline: 0; resize: vertical; color: var(--ink); background: transparent; font-family: Georgia, "Noto Serif SC", serif; font-size: 19px; line-height: 1.6; }
 .composer textarea::placeholder { color: #b0a59d; }
+.image-preview { position: relative; margin: 0 0 14px; overflow: hidden; border-radius: 15px; background: var(--paper-2); }
+.image-preview img { width: 100%; max-height: 360px; display: block; object-fit: cover; }
+.image-preview button { position: absolute; top: 10px; right: 10px; min-height: 32px; padding: 0 11px; border: 0; border-radius: 99px; color: white; background: rgba(43,39,36,.78); font-size: 11px; font-weight: 750; }
 .composer-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 13px; border-top: 1px solid var(--line); }
+.composer-options { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.image-picker { min-height: 37px; display: inline-flex; align-items: center; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--sage); background: var(--card); font-size: 11px; font-weight: 780; cursor: pointer; }
+.image-picker input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .visibility { display: inline-flex; padding: 3px; border-radius: 10px; background: #f3ece5; }
 .visibility button { min-height: 31px; padding: 0 10px; border: 0; border-radius: 8px; color: var(--muted); background: transparent; font-size: 11px; font-weight: 700; }
 .visibility button.active { color: var(--rust-dark); background: var(--card); box-shadow: 0 3px 8px rgba(72,52,41,.07); }
@@ -78,6 +84,8 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
 .update-meta > div { flex: 1; }
 .update-type { padding: 5px 9px; border-radius: 99px; color: var(--sage) !important; background: rgba(97,114,105,.1); font-size: 10px !important; font-weight: 800; }
 .update-text { margin: 17px 0; font-family: Georgia, "Noto Serif SC", serif; font-size: 19px; line-height: 1.75; white-space: pre-wrap; }
+.update-image { width: 100%; max-height: 560px; display: block; margin: 0 0 17px; border-radius: 14px; object-fit: cover; background: var(--paper-2); }
+.image-loading { min-height: 160px; display: grid; place-items: center; margin: 0 0 17px; border-radius: 14px; color: var(--muted); background: var(--paper-2); font-size: 11px; }
 .update-footer { display: flex; justify-content: space-between; padding-top: 13px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; }
 .voice-actions { display: flex; align-items: center; gap: 8px; margin: 12px 0 16px; }
 .audio-button { min-width: 170px; min-height: 42px; display: flex; align-items: center; gap: 4px; padding: 0 13px; border: 0; border-radius: 11px; color: var(--rust-dark); background: #f2e3d9; font-size: 12px; font-weight: 750; }
@@ -191,7 +199,7 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
   .mobile-nav a { min-height: 48px; display: grid; justify-items: center; gap: 1px; padding: 3px; font-size: 9px; }.mobile-nav a.active { color: var(--rust); background: #f4e6dc; }.mobile-nav .nav-icon { font-size: 17px; }
   .page-grid, .space-page, .elder-page, .settings-page { padding-top: 24px; }
   .composer, .update-card { padding: 18px; }
-  .composer-actions { align-items: stretch; flex-direction: column; }.composer-actions .primary-button { width: 100%; }
+  .composer-actions { align-items: stretch; flex-direction: column; }.composer-actions .primary-button { width: 100%; }.composer-options { align-items: stretch; flex-direction: column; }.image-picker { justify-content: center; }
   .right-rail { grid-template-columns: 1fr; }.privacy-card { grid-column: auto; }
   .space-hero { align-items: flex-start; flex-wrap: wrap; padding: 24px; }.space-hero .avatar { width: 58px; height: 58px; }.space-stats { width: 100%; margin: 0; padding: 16px 0 0; border: 0; border-top: 1px solid var(--line); }
   .space-toolbar { align-items: flex-start; flex-direction: column; }.filter-pills { margin-top: 0; }
