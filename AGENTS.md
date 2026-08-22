@@ -18,6 +18,14 @@
 - Do not add distributed storage, queues, sync, NAS dependencies, or replication before real family usage requires them.
 - A mounted NAS may be the configured production storage root, but capacity is not a substitute for backups, mount validation, or recovery testing.
 
+## Machine context
+
+- Read the gitignored `.agent-machine.env` for this checkout's machine role and use `.agent-machine.env.example` only as a safe schema.
+- The production frontend has one authoritative deployment: GitHub Pages at `https://family.integ.life`.
+- The production backend runs on the Mac mini addressed by the deployment alias `mmini`, with Cloudflare Tunnel exposing `https://family-api.integ.life`.
+- The Go backend must not embed or serve the React frontend. Its public root returns API metadata, while `/api`, `/mcp`, OAuth, media, health, and version endpoints remain backend-owned.
+- Never store family, administrator, member, Gemini, Cloudflare, or other credentials in machine-context files.
+
 ## Work logs
 
 - Every task performed in this repository must have a durable Integ.Life work log.

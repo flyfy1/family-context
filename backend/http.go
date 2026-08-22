@@ -3,12 +3,10 @@ package main
 import (
 	"context"
 	"crypto/rand"
-	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
-	"io/fs"
 	"log"
 	"mime"
 	"net/http"
@@ -22,9 +20,6 @@ import (
 const maxAudioBytes = 18 << 20
 const maxMediaImportBytes = 100 << 20
 const maxInlineAnalysisBytes = 14 << 20
-
-//go:embed web
-var embeddedWeb embed.FS
 
 type app struct {
 	store       *store
@@ -73,6 +68,7 @@ func newApp(store *store, ai audioProcessor, mediaDir, apiToken string) *app {
 
 func (a *app) routes() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /{$}", a.apiRoot)
 	mux.HandleFunc("GET /healthz", a.health)
 	mux.HandleFunc("GET /version", a.versionInfo)
 	mux.HandleFunc("GET /.well-known/oauth-protected-resource", a.mcpOAuthProtectedResource)
@@ -141,11 +137,6 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("GET /mcp/members/{id}", a.mcpEndpoint)
 	mux.HandleFunc("POST /mcp/members/{id}", a.mcpEndpoint)
 	mux.HandleFunc("DELETE /mcp/members/{id}", a.mcpEndpoint)
-	webRoot, err := fs.Sub(embeddedWeb, "web")
-	if err != nil {
-		panic(err)
-	}
-	mux.Handle("GET /", http.FileServer(http.FS(webRoot)))
 	return a.cors(a.recoverPanic(a.logRequests(mux)))
 }
 
@@ -204,6 +195,14 @@ func (a *app) authorize(next http.Handler) http.Handler {
 
 func (a *app) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (a *app) apiRoot(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{
+		"service":  "family-daily-api",
+		"status":   "ok",
+		"frontend": "https://family.integ.life",
+	})
 }
 
 func (a *app) versionInfo(w http.ResponseWriter, _ *http.Request) {

@@ -96,7 +96,7 @@ func TestRequiresFamilyToken(t *testing.T) {
 	}
 }
 
-func TestServesWebApp(t *testing.T) {
+func TestRootIdentifiesAPIWithoutServingWebApp(t *testing.T) {
 	t.Parallel()
 	temp := t.TempDir()
 	store, err := openStore(filepath.Join(temp, "test.db"))
@@ -116,8 +116,14 @@ func TestServesWebApp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "Family Daily") {
-		t.Fatalf("web app status = %d, body = %q", resp.StatusCode, body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("API root status = %d, body = %q", resp.StatusCode, body)
+	}
+	if contentType := resp.Header.Get("Content-Type"); !strings.HasPrefix(contentType, "application/json") {
+		t.Fatalf("API root content type = %q", contentType)
+	}
+	if strings.Contains(strings.ToLower(string(body)), "<!doctype html>") || !strings.Contains(string(body), `"service":"family-daily-api"`) {
+		t.Fatalf("API root served unexpected body = %q", body)
 	}
 }
 

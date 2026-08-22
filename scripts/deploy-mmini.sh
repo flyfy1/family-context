@@ -13,8 +13,6 @@ commit="$(git -C "$root_dir" rev-parse HEAD)"
 version="${VERSION:-$(date -u +%Y%m%d-%H%M%S)}"
 build_time="${BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 
-npm --prefix "$root_dir/web" ci
-npm --prefix "$root_dir/web" run build
 (cd "$root_dir/backend" && go test ./...)
 (cd "$root_dir/backend" && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath \
   -ldflags "-s -w -X main.version=$version -X main.commit=$commit -X main.buildTime=$build_time" \
