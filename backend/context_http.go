@@ -76,10 +76,6 @@ func (a *app) createMember(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, member)
 }
 
-func validMemberRole(role string) bool {
-	return role == "member" || role == "elder" || role == "child"
-}
-
 func (a *app) listUpdates(w http.ResponseWriter, r *http.Request) {
 	familyID := strings.TrimSpace(r.URL.Query().Get("familyId"))
 	if familyID == "" {
