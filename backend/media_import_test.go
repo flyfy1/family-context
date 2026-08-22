@@ -80,6 +80,15 @@ func TestMediaImportReviewIsolationAndShare(t *testing.T) {
 	if len(item.Analysis.SuggestedRecipients) != 1 || item.Analysis.SuggestedRecipients[0].MemberID != second.Member.ID || item.Analysis.SuggestedRecipients[0].Name != second.Member.Name {
 		t.Fatalf("recipient suggestion was not resolved to the real family member: %+v", item.Analysis.SuggestedRecipients)
 	}
+	if item.Analysis.RuleSnapshot != "可以分享普通家庭活动。" {
+		t.Fatalf("share rule snapshot = %q", item.Analysis.RuleSnapshot)
+	}
+	browserItems := familyMemberRequestJSON[struct {
+		MediaImports []MediaImport `json:"mediaImports"`
+	}](t, server.Client(), http.MethodGet, server.URL+"/api/v1/me/media-imports", "admin-token", first.Member.ID, nil, http.StatusOK)
+	if len(browserItems.MediaImports) != 1 || browserItems.MediaImports[0].Analysis == nil || browserItems.MediaImports[0].Analysis.RuleSnapshot != item.Analysis.RuleSnapshot {
+		t.Fatalf("browser member Space did not receive provenance: %+v", browserItems.MediaImports)
+	}
 	repeated := uploadTestMediaImport(t, server, first.AccessToken, "ride.png", "image/png", []byte("\x89PNG\r\n\x1a\ndifferent retry body"))
 	if repeated.ID != item.ID || repeated.SHA256 != item.SHA256 {
 		t.Fatalf("clientMediaId retry created a duplicate: %+v", repeated)
@@ -251,4 +260,40 @@ func memberRequest(t *testing.T, server *httptest.Server, token, method, path st
 		t.Fatal(err)
 	}
 	return resp
+}
+
+func familyMemberRequestJSON[T any](t *testing.T, client *http.Client, method, url, familyToken, memberID string, input any, wantStatus int) T {
+	t.Helper()
+	var body io.Reader
+	if input != nil {
+		data, err := json.Marshal(input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body = bytes.NewReader(data)
+	}
+	req, err := http.NewRequestWithContext(context.Background(), method, url, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("X-Family-Token", familyToken)
+	req.Header.Set("X-Member-ID", memberID)
+	if input != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != wantStatus {
+		var responseBody any
+		_ = json.NewDecoder(resp.Body).Decode(&responseBody)
+		t.Fatalf("%s %s status = %d, want %d, body = %+v", method, url, resp.StatusCode, wantStatus, responseBody)
+	}
+	var result T
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	return result
 }

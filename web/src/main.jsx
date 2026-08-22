@@ -233,18 +233,31 @@ function ImageAttachment({ path, api, notify }) {
 
 function MemberSpace({ api, members, currentMember, notify, refreshKey }) {
   const [updates, setUpdates] = useState([]);
+  const [mediaImports, setMediaImports] = useState([]);
   const [filter, setFilter] = useState("all");
   useEffect(() => {
     if (!currentMember) return;
-    api(`/api/v1/updates?scope=mine&memberId=${encodeURIComponent(currentMember.id)}`).then(data => setUpdates(data.updates || [])).catch(error => notify(error.message));
+    Promise.all([
+      api(`/api/v1/updates?scope=mine&memberId=${encodeURIComponent(currentMember.id)}`).then(data => setUpdates(data.updates || [])),
+      api("/api/v1/me/media-imports", { headers: { "X-Member-ID": currentMember.id } }).then(data => setMediaImports(data.mediaImports || [])),
+    ]).catch(error => notify(error.message));
   }, [api, currentMember?.id, refreshKey]);
   if (!currentMember) return null;
   const shown = updates.filter(update => filter === "all" || update.visibility === filter);
   return <div className="space-page">
     <section className="space-hero" style={{ "--member-color": currentMember.color }}><Avatar member={currentMember} large /><div><p className="eyebrow">MEMBER SPACE</p><h2>{currentMember.name}的空间</h2><p>每一条记录都先属于你，由你决定是否分享给家庭。</p></div><div className="space-stats"><strong>{updates.length}</strong><span>条记录</span><strong>{updates.filter(item => item.visibility === "family").length}</strong><span>已分享</span></div></section>
+    {mediaImports.length > 0 && <section className="media-audit-section"><SectionHeading eyebrow="AI SHARE HISTORY" title="同步媒体与分享判断" count={mediaImports.length} /><div className="media-audit-list">{mediaImports.map(item => <MediaImportAuditCard key={item.id} item={item} member={currentMember} api={api} notify={notify} />)}</div></section>}
     <div className="space-toolbar"><SectionHeading eyebrow="LOCAL FILE SPACE" title="我的记录" /><div className="filter-pills">{[["all","全部"],["private","仅自己"],["family","已分享"]].map(([value,label]) => <button key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{label}</button>)}</div></div>
     {shown.length ? <div className="update-list narrow">{shown.map(update => <UpdateCard key={update.id} update={update} member={members.find(item => item.id === update.memberId)} api={api} notify={notify} />)}</div> : <EmptyState icon="◫" title="这里还没有记录" text="你发布的私人和家庭 Update 会出现在这里，并同步保存到个人文件空间。" />}
   </div>;
+}
+
+function MediaImportAuditCard({ item, member, api, notify }) {
+  const analysis = item.analysis;
+  const shared = item.shareDecision === "family" && item.updateId;
+  const decidedPrivate = item.shareDecision === "private";
+  const recipients = analysis?.suggestedRecipients || [];
+  return <article className={`media-audit-card card ${shared ? "shared" : "private"}`}><div className="media-audit-preview"><ImageAttachment path={item.mediaUrl} api={api} notify={notify} /></div><div className="media-audit-content"><div className="media-audit-heading"><div><span className="media-decision">{shared ? "已分享给家庭" : decidedPrivate ? "已保留私密" : analysis?.suggestedVisibility === "private" ? "AI 建议私密" : "等待审核"}</span><strong>{analysis?.suggestedCaption || item.originalName}</strong></div><small>{formatTime(item.updatedAt)}</small></div>{analysis?.summary && <p>{analysis.summary}</p>}<dl className="media-audit-facts"><div><dt>分享身份</dt><dd>{member.name}</dd></div><div><dt>实际对象</dt><dd>{shared ? "全体家庭成员" : "仅自己"}</dd></div><div><dt>AI 建议对象</dt><dd>{recipients.length ? recipients.map(recipient => recipient.name).join("、") : "无人"}</dd></div></dl>{analysis?.recipientReason && <p className="media-recipient-reason">{analysis.recipientReason}</p>}{analysis?.ruleSnapshot && <details><summary>查看本次使用的规则</summary><p>{analysis.ruleSnapshot}</p></details>}</div></article>;
 }
 
 function ElderView({ api, members, currentMember, notify, refreshKey }) {

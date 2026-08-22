@@ -105,6 +105,7 @@ type MediaAnalysis struct {
 	SuggestedVisibility string                `json:"suggestedVisibility"`
 	SuggestedRecipients []MediaShareRecipient `json:"suggestedRecipients"`
 	RecipientReason     string                `json:"recipientReason"`
+	RuleSnapshot        string                `json:"ruleSnapshot"`
 	Reason              string                `json:"reason"`
 }
 

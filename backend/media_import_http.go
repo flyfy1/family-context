@@ -15,7 +15,7 @@ import (
 )
 
 func (a *app) memberCreateMediaImport(w http.ResponseWriter, r *http.Request) {
-	member := memberFromContext(r.Context())
+	member := judgmentMemberFromContext(r.Context())
 	r.Body = http.MaxBytesReader(w, r.Body, maxMediaImportBytes+(1<<20))
 	if err := r.ParseMultipartForm(1 << 20); err != nil {
 		writeError(w, http.StatusBadRequest, "媒体过大或上传格式不正确")
@@ -133,6 +133,7 @@ func (a *app) memberCreateMediaImport(w http.ResponseWriter, r *http.Request) {
 				item.AnalysisError = "媒体已安全保存；AI 暂时无法完成分析"
 			} else {
 				analysis = validateMediaRecipientSuggestions(analysis, recipientCandidates)
+				analysis.RuleSnapshot = settings.SharePrompt
 				item.AnalysisStatus = "ready"
 				item.Analysis = &analysis
 			}
@@ -195,7 +196,7 @@ func suggestionsCoverCandidates(suggestions []MediaShareRecipient, candidates []
 }
 
 func (a *app) memberListMediaImports(w http.ResponseWriter, r *http.Request) {
-	member := memberFromContext(r.Context())
+	member := judgmentMemberFromContext(r.Context())
 	items, err := a.store.listMediaImports(r.Context(), member.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "暂时无法读取媒体导入记录")
@@ -205,7 +206,7 @@ func (a *app) memberListMediaImports(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) memberGetMediaImport(w http.ResponseWriter, r *http.Request) {
-	member := memberFromContext(r.Context())
+	member := judgmentMemberFromContext(r.Context())
 	item, err := a.store.getMediaImport(r.Context(), r.PathValue("id"), member.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "没有找到这条媒体导入记录")
@@ -219,7 +220,7 @@ func (a *app) memberGetMediaImport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) memberDecideMediaImport(w http.ResponseWriter, r *http.Request) {
-	member := memberFromContext(r.Context())
+	member := judgmentMemberFromContext(r.Context())
 	var input struct {
 		Visibility string `json:"visibility"`
 		Caption    string `json:"caption"`
