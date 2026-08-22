@@ -1,6 +1,6 @@
 # Family Daily Architecture Diagram
 
-> Updated: 2026-08-22  
+> Updated: 2026-08-22
 > Scope: current implementation and staged future direction
 
 ## Status legend
