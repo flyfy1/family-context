@@ -18,9 +18,9 @@ func (s *store) createMediaImport(ctx context.Context, item MediaImport, mediaFi
 	if item.CapturedAt != nil {
 		capturedAt = item.CapturedAt.Format(time.RFC3339Nano)
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO media_imports(id, family_id, member_id, media_type, mime_type, original_name, media_file, captured_at, device_id, client_media_id, sha256, analysis_status, analysis_json, analysis_error, share_decision, update_id, created_at, updated_at)
-		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, '', ?, ?)`, item.ID, item.FamilyID, item.MemberID, item.MediaType, item.MimeType,
-		item.OriginalName, mediaFile, capturedAt, item.DeviceID, item.ClientMediaID, item.SHA256, item.AnalysisStatus, item.ShareDecision, item.CreatedAt.Format(time.RFC3339Nano), item.UpdatedAt.Format(time.RFC3339Nano))
+	_, err = tx.ExecContext(ctx, `INSERT INTO media_imports(id, family_id, member_id, media_type, mime_type, original_name, media_file, captured_at, device_id, client_media_id, sha256, analysis_status, transcript, analysis_json, analysis_error, share_decision, update_id, created_at, updated_at)
+		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, '', ?, ?)`, item.ID, item.FamilyID, item.MemberID, item.MediaType, item.MimeType,
+		item.OriginalName, mediaFile, capturedAt, item.DeviceID, item.ClientMediaID, item.SHA256, item.AnalysisStatus, item.Transcript, item.ShareDecision, item.CreatedAt.Format(time.RFC3339Nano), item.UpdatedAt.Format(time.RFC3339Nano))
 	if err != nil {
 		return err
 	}
@@ -46,8 +46,8 @@ func (s *store) saveMediaImportAnalysis(ctx context.Context, item MediaImport) e
 		return err
 	}
 	defer tx.Rollback()
-	result, err := tx.ExecContext(ctx, `UPDATE media_imports SET analysis_status = ?, analysis_json = ?, analysis_error = ?, updated_at = ? WHERE id = ? AND member_id = ?`,
-		item.AnalysisStatus, analysisJSON, item.AnalysisError, item.UpdatedAt.Format(time.RFC3339Nano), item.ID, item.MemberID)
+	result, err := tx.ExecContext(ctx, `UPDATE media_imports SET analysis_status = ?, transcript = ?, analysis_json = ?, analysis_error = ?, updated_at = ? WHERE id = ? AND member_id = ?`,
+		item.AnalysisStatus, item.Transcript, analysisJSON, item.AnalysisError, item.UpdatedAt.Format(time.RFC3339Nano), item.ID, item.MemberID)
 	if err != nil {
 		return err
 	}
@@ -126,7 +126,7 @@ func (s *store) shareMediaImport(ctx context.Context, id, memberID string, updat
 	}
 	if existingUpdateID == "" {
 		_, err = tx.ExecContext(ctx, `INSERT INTO updates(id, family_id, member_id, type, text, visibility, audio_file, transcript, ai_summary, source, created_at)
-			VALUES(?, ?, ?, ?, ?, 'family', ?, '', ?, ?, ?)`, update.ID, update.FamilyID, update.MemberID, update.Type, update.Text, mediaFile, update.AISummary, update.Source, update.CreatedAt.Format(time.RFC3339Nano))
+			VALUES(?, ?, ?, ?, ?, 'family', ?, ?, ?, ?, ?)`, update.ID, update.FamilyID, update.MemberID, update.Type, update.Text, mediaFile, update.Transcript, update.AISummary, update.Source, update.CreatedAt.Format(time.RFC3339Nano))
 		if err != nil {
 			return MediaImport{}, err
 		}
@@ -147,14 +147,14 @@ func (s *store) shareMediaImport(ctx context.Context, id, memberID string, updat
 	return s.getMediaImport(ctx, id, memberID)
 }
 
-const mediaImportSelect = `SELECT id, family_id, member_id, media_type, mime_type, original_name, media_file, captured_at, device_id, client_media_id, sha256, analysis_status, analysis_json, analysis_error, share_decision, update_id, created_at, updated_at FROM media_imports`
+const mediaImportSelect = `SELECT id, family_id, member_id, media_type, mime_type, original_name, media_file, captured_at, device_id, client_media_id, sha256, analysis_status, transcript, analysis_json, analysis_error, share_decision, update_id, created_at, updated_at FROM media_imports`
 
 func scanMediaImport(row rowScanner) (MediaImport, error) {
 	var item MediaImport
 	var mediaFile, analysisJSON, createdAt, updatedAt string
 	var capturedAt sql.NullString
 	if err := row.Scan(&item.ID, &item.FamilyID, &item.MemberID, &item.MediaType, &item.MimeType, &item.OriginalName, &mediaFile, &capturedAt,
-		&item.DeviceID, &item.ClientMediaID, &item.SHA256, &item.AnalysisStatus, &analysisJSON, &item.AnalysisError, &item.ShareDecision, &item.UpdateID, &createdAt, &updatedAt); err != nil {
+		&item.DeviceID, &item.ClientMediaID, &item.SHA256, &item.AnalysisStatus, &item.Transcript, &analysisJSON, &item.AnalysisError, &item.ShareDecision, &item.UpdateID, &createdAt, &updatedAt); err != nil {
 		return MediaImport{}, err
 	}
 	item.MediaURL = "/space-files/members/" + item.MemberID + "/media/" + mediaFile

@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -43,6 +45,19 @@ func run() error {
 	ai, err := newAudioProcessorFromEnv()
 	if err != nil {
 		return err
+	}
+	if os.Getenv("FAMILY_DAILY_BACKFILL_TRANSCRIPTS") == "1" {
+		report, backfillErr := runTranscriptBackfill(context.Background(), store, ai, dataDir)
+		if err := json.NewEncoder(os.Stdout).Encode(report); err != nil {
+			return err
+		}
+		if backfillErr != nil {
+			return backfillErr
+		}
+		if len(report.Failures) > 0 {
+			return fmt.Errorf("transcript backfill completed with %d failures", len(report.Failures))
+		}
+		return nil
 	}
 
 	adminToken := envOr("ADMIN_API_TOKEN", "family-daily-admin-local")

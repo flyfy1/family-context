@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -34,6 +35,7 @@ type ActivityPost struct {
 	Text       string    `json:"text,omitempty"`
 	MediaURL   string    `json:"mediaUrl,omitempty"`
 	MimeType   string    `json:"mimeType,omitempty"`
+	Transcript string    `json:"transcript,omitempty"`
 	CreatedAt  time.Time `json:"createdAt"`
 }
 
@@ -61,11 +63,22 @@ CREATE TABLE IF NOT EXISTS activity_posts (
   body TEXT NOT NULL DEFAULT '',
   media_file TEXT NOT NULL DEFAULT '',
   mime_type TEXT NOT NULL DEFAULT '',
+  transcript TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_activity_thread_member ON activity_thread_members(member_id, thread_id);
 CREATE INDEX IF NOT EXISTS idx_activity_posts_thread ON activity_posts(thread_id, created_at);
 `)
+	if err != nil {
+		return err
+	}
+	var hasTranscript int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('activity_posts') WHERE name = 'transcript'`).Scan(&hasTranscript); err != nil {
+		return err
+	}
+	if hasTranscript == 0 {
+		_, err = s.db.ExecContext(ctx, `ALTER TABLE activity_posts ADD COLUMN transcript TEXT NOT NULL DEFAULT ''`)
+	}
 	return err
 }
 
@@ -211,7 +224,7 @@ func (s *store) getActivityThread(ctx context.Context, id, memberID string) (Act
 	if err := rows.Close(); err != nil {
 		return ActivityThread{}, err
 	}
-	postRows, err := s.db.QueryContext(ctx, `SELECT p.id, p.thread_id, p.member_id, m.name, p.post_type, p.body, p.media_file, p.mime_type, p.created_at
+	postRows, err := s.db.QueryContext(ctx, `SELECT p.id, p.thread_id, p.member_id, m.name, p.post_type, p.body, p.media_file, p.mime_type, p.transcript, p.created_at
 		FROM activity_posts p JOIN members m ON m.id = p.member_id WHERE p.thread_id = ? ORDER BY p.created_at`, id)
 	if err != nil {
 		return ActivityThread{}, err
@@ -221,7 +234,7 @@ func (s *store) getActivityThread(ctx context.Context, id, memberID string) (Act
 	for postRows.Next() {
 		var post ActivityPost
 		var mediaFile, postAt string
-		if err := postRows.Scan(&post.ID, &post.ThreadID, &post.MemberID, &post.MemberName, &post.Type, &post.Text, &mediaFile, &post.MimeType, &postAt); err != nil {
+		if err := postRows.Scan(&post.ID, &post.ThreadID, &post.MemberID, &post.MemberName, &post.Type, &post.Text, &mediaFile, &post.MimeType, &post.Transcript, &postAt); err != nil {
 			return ActivityThread{}, err
 		}
 		post.CreatedAt, err = time.Parse(time.RFC3339Nano, postAt)
@@ -236,7 +249,7 @@ func (s *store) getActivityThread(ctx context.Context, id, memberID string) (Act
 	return thread, postRows.Err()
 }
 
-func (s *store) createActivityPost(ctx context.Context, threadID, memberID, postType, body, mediaFile, mimeType string, now time.Time) (ActivityPost, error) {
+func (s *store) createActivityPost(ctx context.Context, threadID, memberID, postType, body, mediaFile, mimeType, transcript string, now time.Time) (ActivityPost, error) {
 	if _, err := s.getActivityThread(ctx, threadID, memberID); err != nil {
 		return ActivityPost{}, err
 	}
@@ -245,8 +258,8 @@ func (s *store) createActivityPost(ctx context.Context, threadID, memberID, post
 		return ActivityPost{}, errors.New("empty activity post")
 	}
 	id := newID()
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO activity_posts(id, thread_id, member_id, post_type, body, media_file, mime_type, created_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?)`,
-		id, threadID, memberID, postType, body, mediaFile, mimeType, now.UTC().Format(time.RFC3339Nano)); err != nil {
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO activity_posts(id, thread_id, member_id, post_type, body, media_file, mime_type, transcript, created_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, threadID, memberID, postType, body, mediaFile, mimeType, transcript, now.UTC().Format(time.RFC3339Nano)); err != nil {
 		return ActivityPost{}, err
 	}
 	thread, err := s.getActivityThread(ctx, threadID, memberID)
@@ -299,7 +312,7 @@ func (a *app) memberCreateActivityTextPost(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, "内容格式不正确")
 		return
 	}
-	post, err := a.store.createActivityPost(r.Context(), r.PathValue("id"), member.ID, "text", input.Text, "", "", time.Now().UTC())
+	post, err := a.store.createActivityPost(r.Context(), r.PathValue("id"), member.ID, "text", input.Text, "", "", "", time.Now().UTC())
 	if errors.Is(err, sql.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "没有找到这个活动")
 		return
@@ -376,10 +389,18 @@ func (a *app) memberCreateActivityMediaPost(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	postType := "image"
+	transcript := ""
 	if strings.HasPrefix(mimeType, "video/") {
 		postType = "video"
+		if transcriber, ok := a.ai.(mediaTranscriber); ok && len(data) <= maxInlineAnalysisBytes {
+			if value, transcribeErr := transcriber.Transcribe(r.Context(), data, mimeType); transcribeErr == nil {
+				transcript = value
+			} else {
+				log.Printf("video transcription failed for activity post %s: %v", postID, transcribeErr)
+			}
+		}
 	}
-	post, err := a.store.createActivityPost(r.Context(), threadID, member.ID, postType, r.FormValue("text"), fileName, mimeType, time.Now().UTC())
+	post, err := a.store.createActivityPost(r.Context(), threadID, member.ID, postType, r.FormValue("text"), fileName, mimeType, transcript, time.Now().UTC())
 	if err != nil {
 		_ = os.Remove(filepath.Join(dir, fileName))
 		writeError(w, http.StatusBadRequest, "暂时无法发布内容")

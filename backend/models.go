@@ -110,6 +110,7 @@ type MemberLoginCredential struct {
 }
 
 type MediaAnalysis struct {
+	Transcript          string                `json:"transcript,omitempty"`
 	Summary             string                `json:"summary"`
 	SuggestedCaption    string                `json:"suggestedCaption"`
 	People              string                `json:"people,omitempty"`
@@ -140,6 +141,7 @@ type MediaImport struct {
 	ClientMediaID  string         `json:"clientMediaId,omitempty"`
 	SHA256         string         `json:"sha256"`
 	AnalysisStatus string         `json:"analysisStatus"`
+	Transcript     string         `json:"transcript,omitempty"`
 	Analysis       *MediaAnalysis `json:"analysis,omitempty"`
 	AnalysisError  string         `json:"analysisError,omitempty"`
 	ShareDecision  string         `json:"shareDecision"`

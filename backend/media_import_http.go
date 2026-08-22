@@ -134,6 +134,7 @@ func (a *app) memberCreateMediaImport(w http.ResponseWriter, r *http.Request) {
 			} else {
 				analysis = validateMediaRecipientSuggestions(analysis, recipientCandidates)
 				analysis.RuleSnapshot = settings.SharePrompt
+				item.Transcript = strings.TrimSpace(analysis.Transcript)
 				item.AnalysisStatus = "ready"
 				item.Analysis = &analysis
 			}
@@ -278,6 +279,7 @@ func (a *app) shareMediaImport(r *http.Request, item MediaImport, caption, media
 	if item.Analysis != nil {
 		update.AISummary = item.Analysis.Summary
 	}
+	update.Transcript = item.Transcript
 	if err := persistUpdateToSpace(a.spacesRoot, update); err != nil {
 		return MediaImport{}, err
 	}

@@ -27,6 +27,10 @@ type mediaAnalyzer interface {
 	AnalyzeMedia(ctx context.Context, media []byte, mimeType, sharePrompt string, recipientCandidates []Member) (MediaAnalysis, error)
 }
 
+type mediaTranscriber interface {
+	Transcribe(ctx context.Context, media []byte, mimeType string) (string, error)
+}
+
 type ShareDecision struct {
 	Allowed bool   `json:"allowed"`
 	Reason  string `json:"reason"`
@@ -79,8 +83,16 @@ func (stubAudioProcessor) AnalyzeMedia(_ context.Context, _ []byte, mimeType, sh
 			recipients = append(recipients, MediaShareRecipient{MemberID: member.ID, Name: member.Name})
 		}
 	}
-	return MediaAnalysis{Summary: "记录了一段家庭生活" + mediaType + "。", SuggestedCaption: "今天的生活片段", Activities: []string{"家庭生活"},
+	transcript := ""
+	if strings.HasPrefix(mimeType, "video/") {
+		transcript = "[no speech]"
+	}
+	return MediaAnalysis{Transcript: transcript, Summary: "记录了一段家庭生活" + mediaType + "。", SuggestedCaption: "今天的生活片段", Activities: []string{"家庭生活"},
 		SuggestedVisibility: visibility, SuggestedRecipients: recipients, RecipientReason: "stub recipient suggestion", Reason: "stub media analysis"}, nil
+}
+
+func (stubAudioProcessor) Transcribe(_ context.Context, _ []byte, _ string) (string, error) {
+	return "[no speech]", nil
 }
 
 func (g *geminiAudioProcessor) AnalyzeMedia(ctx context.Context, media []byte, mimeType, sharePrompt string, recipientCandidates []Member) (MediaAnalysis, error) {
@@ -99,16 +111,19 @@ func (g *geminiAudioProcessor) AnalyzeMedia(ctx context.Context, media []byte, m
 成员分享规则：
 ` + strings.TrimSpace(sharePrompt) + `
 
+如果输入是视频，transcript 必须逐字记录其中所有可听见的说话内容，保留中文、英文或混合语音的原始语言，不要翻译或改写；没有可听见的说话时输出 [no speech]。照片的 transcript 留空。
+
 候选家庭成员 JSON：
 ` + string(candidatesJSON)
 	schema := map[string]any{
 		"type": "object", "properties": map[string]any{
-			"summary": map[string]any{"type": "string"}, "suggestedCaption": map[string]any{"type": "string"},
+			"transcript": map[string]any{"type": "string", "description": "For video, a faithful original-language speech transcript, or [no speech]. Empty for images."},
+			"summary":    map[string]any{"type": "string"}, "suggestedCaption": map[string]any{"type": "string"},
 			"people": map[string]any{"type": "string"}, "activities": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 			"containsSensitive": map[string]any{"type": "boolean"}, "suggestedVisibility": map[string]any{"type": "string", "enum": []string{"private", "family"}},
 			"suggestedRecipients": map[string]any{"type": "array", "items": map[string]any{"type": "object", "properties": map[string]any{"memberId": map[string]any{"type": "string"}}, "required": []string{"memberId"}}},
 			"recipientReason":     map[string]any{"type": "string"}, "reason": map[string]any{"type": "string"},
-		}, "required": []string{"summary", "suggestedCaption", "activities", "containsSensitive", "suggestedVisibility", "suggestedRecipients", "recipientReason", "reason"},
+		}, "required": []string{"transcript", "summary", "suggestedCaption", "activities", "containsSensitive", "suggestedVisibility", "suggestedRecipients", "recipientReason", "reason"},
 	}
 	parts := []geminiGeneratePart{
 		{Text: prompt},
@@ -118,7 +133,7 @@ func (g *geminiAudioProcessor) AnalyzeMedia(ctx context.Context, media []byte, m
 	if err := g.generateJSON(ctx, "gemini media analysis", g.model, parts, schema, &analysis, 2<<20); err != nil {
 		return MediaAnalysis{}, err
 	}
-	if analysis.Summary == "" || analysis.SuggestedCaption == "" || !validVisibility(analysis.SuggestedVisibility) || analysis.RecipientReason == "" || analysis.Reason == "" {
+	if analysis.Summary == "" || analysis.SuggestedCaption == "" || !validVisibility(analysis.SuggestedVisibility) || analysis.RecipientReason == "" || analysis.Reason == "" || (strings.HasPrefix(mimeType, "video/") && strings.TrimSpace(analysis.Transcript) == "") {
 		return MediaAnalysis{}, errors.New("gemini media analysis returned incomplete output")
 	}
 	return analysis, nil
@@ -161,7 +176,7 @@ Do not add facts, make health diagnoses, or turn guesses into certainty.`},
 	result.Transcript = strings.TrimSpace(result.Transcript)
 	result.Summary = strings.TrimSpace(result.Summary)
 	if result.Transcript == "" {
-		transcript, err := g.transcribeAudio(ctx, encodedAudio, mimeType)
+		transcript, err := g.Transcribe(ctx, audio, mimeType)
 		if err != nil {
 			return AudioResult{}, err
 		}
@@ -176,10 +191,15 @@ Do not add facts, make health diagnoses, or turn guesses into certainty.`},
 	return result, nil
 }
 
-func (g *geminiAudioProcessor) transcribeAudio(ctx context.Context, encodedAudio, mimeType string) (string, error) {
+func (g *geminiAudioProcessor) Transcribe(ctx context.Context, media []byte, mimeType string) (string, error) {
+	encodedMedia := base64.StdEncoding.EncodeToString(media)
+	instruction := `Transcribe this audio recording faithfully. Return only JSON with transcript. Keep every utterance in its original spoken language: preserve Chinese as Chinese, English as English, and mixed-language speech as mixed language. Do not translate, summarize, paraphrase, or invent unclear words. Use [听不清] for unclear Chinese speech and [inaudible] for unclear English speech. If there is no intelligible speech, use [no speech].`
+	if strings.HasPrefix(mimeType, "video/") {
+		instruction = `Transcribe every audible spoken word in this video faithfully. Return only JSON with transcript. Preserve Chinese, English, and mixed-language speech in the original spoken language. Do not translate, summarize, paraphrase, or infer words from visuals. Use [听不清] for unclear Chinese speech and [inaudible] for unclear English speech. If the video contains no intelligible speech, use [no speech].`
+	}
 	parts := []geminiGeneratePart{
-		{Text: `Transcribe this voice recording faithfully. Return only JSON with transcript. Keep every utterance in its original spoken language: preserve Chinese as Chinese, English as English, and mixed-language speech as mixed language. Do not translate, summarize, paraphrase, or invent unclear words. Use [听不清] for unclear Chinese speech and [inaudible] for unclear English speech.`},
-		{InlineData: &geminiGenerateInlineData{MimeType: mimeType, Data: encodedAudio}},
+		{Text: instruction},
+		{InlineData: &geminiGenerateInlineData{MimeType: mimeType, Data: encodedMedia}},
 	}
 	schema := map[string]any{
 		"type": "object",

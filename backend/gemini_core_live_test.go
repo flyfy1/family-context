@@ -78,6 +78,45 @@ func TestGeminiCoreGenerateContentLive(t *testing.T) {
 		}
 	})
 
+	t.Run("video transcript English", func(t *testing.T) {
+		if _, err := exec.LookPath("say"); err != nil {
+			t.Skip("macOS say command is required for the live speech fixture")
+		}
+		ffmpeg, err := exec.LookPath("ffmpeg")
+		if err != nil {
+			t.Skip("ffmpeg is required for the live video fixture")
+		}
+		dir := t.TempDir()
+		audioPath := filepath.Join(dir, "speech.aiff")
+		videoPath := filepath.Join(dir, "speech.webm")
+		if output, err := exec.Command("say", "-v", "Samantha", "-o", audioPath, "The family video has tea and lovely weather. Test complete.").CombinedOutput(); err != nil {
+			t.Fatalf("create live speech fixture: %v: %s", err, output)
+		}
+		if output, err := exec.Command(ffmpeg, "-loglevel", "error", "-f", "lavfi", "-i", "color=c=blue:s=320x240:r=15", "-i", audioPath, "-c:v", "libvpx-vp9", "-c:a", "libopus", "-shortest", videoPath).CombinedOutput(); err != nil {
+			t.Fatalf("create live video fixture: %v: %s", err, output)
+		}
+		video, err := os.ReadFile(videoPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		transcript, err := gemini.Transcribe(ctx, video, "video/webm")
+		if err != nil {
+			t.Fatal(err)
+		}
+		lowerTranscript := strings.ToLower(transcript)
+		if !strings.Contains(lowerTranscript, "tea") || !strings.Contains(lowerTranscript, "weather") {
+			t.Fatalf("video speech was not faithfully transcribed: %q", transcript)
+		}
+		analysis, err := gemini.AnalyzeMedia(ctx, video, "video/webm", "普通家庭视频保持私密", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lowerAnalysisTranscript := strings.ToLower(analysis.Transcript)
+		if !strings.Contains(lowerAnalysisTranscript, "tea") || !strings.Contains(lowerAnalysisTranscript, "weather") {
+			t.Fatalf("video analysis omitted the transcript: %q", analysis.Transcript)
+		}
+	})
+
 	now := time.Now().UTC()
 	member := Member{ID: "member-live", FamilyID: defaultFamilyID, Name: "测试成员", Role: "member", CreatedAt: now}
 	update := Update{ID: "update-live", FamilyID: defaultFamilyID, MemberID: member.ID, Type: "text", Text: "今天喝了一杯茶。", Visibility: "family", CreatedAt: now}

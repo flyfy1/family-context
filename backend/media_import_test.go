@@ -12,6 +12,7 @@ import (
 	"net/textproto"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -34,11 +35,14 @@ func (selectiveMediaProcessor) AnalyzeMedia(_ context.Context, _ []byte, _ strin
 	return analysis, nil
 }
 
-func (p testMediaProcessor) AnalyzeMedia(_ context.Context, _ []byte, _ string, _ string, candidates []Member) (MediaAnalysis, error) {
+func (p testMediaProcessor) AnalyzeMedia(_ context.Context, _ []byte, mimeType string, _ string, candidates []Member) (MediaAnalysis, error) {
 	if p.err != nil {
 		return MediaAnalysis{}, p.err
 	}
 	analysis := p.analysis
+	if strings.HasPrefix(mimeType, "video/") && analysis.Transcript == "" {
+		analysis.Transcript = "家庭视频里的测试语音。"
+	}
 	if analysis.RecipientReason == "" {
 		analysis.RecipientReason = "符合成员指定的收件人规则"
 	}
@@ -156,7 +160,7 @@ func TestMediaImportAutoShareAndFailureStayLocal(t *testing.T) {
 		_ = createTestMemberCredential(t, server, "爷爷")
 		requestMemberJSON[MemberSettings](t, server.Client(), http.MethodPut, server.URL+"/api/v1/me/share-policy", map[string]string{"shareMode": "auto", "sharePrompt": "普通家庭活动可以自动分享。"}, credential.AccessToken, http.StatusOK)
 		item := uploadTestMediaImport(t, server, credential.AccessToken, "dinner.mp4", "video/mp4", []byte("small video"))
-		if item.MediaType != "video" || item.ShareDecision != "family" || item.UpdateID == "" {
+		if item.MediaType != "video" || item.ShareDecision != "family" || item.UpdateID == "" || item.Transcript == "" {
 			t.Fatalf("auto share failed: %+v", item)
 		}
 	})

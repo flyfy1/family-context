@@ -169,6 +169,7 @@ CREATE TABLE IF NOT EXISTS media_imports (
   client_media_id TEXT NOT NULL DEFAULT '',
   sha256 TEXT NOT NULL,
   analysis_status TEXT NOT NULL,
+  transcript TEXT NOT NULL DEFAULT '',
   analysis_json TEXT NOT NULL DEFAULT '',
   analysis_error TEXT NOT NULL DEFAULT '',
   share_decision TEXT NOT NULL DEFAULT 'pending',
@@ -227,6 +228,15 @@ CREATE INDEX IF NOT EXISTS idx_bedtime_stories_child_created ON bedtime_stories(
 	}
 	if hasAttentionColumn == 0 {
 		if _, err := s.db.ExecContext(ctx, `ALTER TABLE members ADD COLUMN needs_attention INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+	var hasMediaTranscript int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('media_imports') WHERE name = 'transcript'`).Scan(&hasMediaTranscript); err != nil {
+		return err
+	}
+	if hasMediaTranscript == 0 {
+		if _, err := s.db.ExecContext(ctx, `ALTER TABLE media_imports ADD COLUMN transcript TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
