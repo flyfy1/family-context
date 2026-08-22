@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 import LandingPage from "./LandingPage";
@@ -83,7 +83,7 @@ function App() {
     localStorage.setItem("fd.sessionToken", credential.accessToken);
     setConfig(current => ({ ...current, sessionToken: credential.accessToken }));
     setSignedInMember(credential.member);
-    location.hash = "/feed";
+    location.hash = credential.member?.role === "elder" ? "/elder" : "/feed";
   }
 
   async function signOut() {
@@ -98,11 +98,12 @@ function App() {
   if (route === "/") return <LanguageContext.Provider value={{ language, tx }}><LandingPage language={language} onLanguageChange={next => setConfig(current => ({ ...current, language: next }))} /></LanguageContext.Provider>;
   if (!config.sessionToken) return <LanguageContext.Provider value={{ language, tx }}><LoginPage config={config} onSignedIn={signedIn} /></LanguageContext.Provider>;
 
-  return <LanguageContext.Provider value={{ language, tx }}><div className="app-shell">
-    <Sidebar route={route} familyName={config.familyName} />
+  const elderMode = route === "/elder";
+  return <LanguageContext.Provider value={{ language, tx }}><div className={`app-shell ${elderMode ? "elder-shell" : ""}`}>
+    {!elderMode && <Sidebar route={route} familyName={config.familyName} />}
     <main className="main-shell">
-      <Topbar route={route} currentMember={currentMember} onSignOut={signOut} language={language} onLanguageChange={next => setConfig(current => ({ ...current, language: next }))} />
-      {!error && <NotificationInbox api={api} currentMember={currentMember} notify={notify} refreshKey={refreshKey} />}
+      {!elderMode && <Topbar route={route} currentMember={currentMember} onSignOut={signOut} language={language} onLanguageChange={next => setConfig(current => ({ ...current, language: next }))} />}
+      {!elderMode && !error && <NotificationInbox api={api} currentMember={currentMember} notify={notify} refreshKey={refreshKey} />}
       {error && route !== "/settings" && <ConnectionError message={error} onSettings={() => { location.hash = "/settings"; }} />}
       {route === "/settings" && <Settings api={api} config={config} setConfig={setConfig} members={members} currentMember={currentMember} refresh={refresh} notify={notify} />}
       {!error && !loading && members.length === 0 && route !== "/settings" && <Onboarding onStart={() => { location.hash = "/settings"; }} />}
@@ -113,7 +114,7 @@ function App() {
       </>}
       {loading && <PageLoading />}
     </main>
-    <MobileNav route={route} />
+    {!elderMode && <MobileNav route={route} />}
     <div className={`toast ${toast ? "show" : ""}`} role="status">{toast}</div>
   </div></LanguageContext.Provider>;
 }
@@ -404,68 +405,154 @@ function MediaImportAuditCard({ item, member, api, notify }) {
 
 function ElderView({ api, members, currentMember, notify, refreshKey }) {
   const { language, tx } = useLanguage();
-  const elder = currentMember?.role === "elder" ? currentMember : members.find(member => member.role === "elder") || currentMember;
-  const [summary, setSummary] = useState(null);
   const [updates, setUpdates] = useState([]);
-  const reload = () => Promise.all([api(`/api/v1/daily-summaries/latest?language=${language}`).then(data => setSummary(data.summary)), api("/api/v1/updates?scope=family").then(data => setUpdates((data.updates || []).slice(0, 3)))]);
-  useEffect(() => { reload().catch(error => notify(error.message)); }, [api, refreshKey]);
-  if (!elder) return null;
-  return <div className="elder-page">
-    <section className="elder-hero">
-      <p className="elder-date">{formatFullDate(new Date(), language)}</p>
-      <h2>{tx(`${elder.name}, how was your day?`, `${elder.name}，今天过得怎么样？`)}</h2>
-      <p>{tx("Tap the button and speak just like a normal conversation.", "按一下按钮，像平时聊天一样说就好。")}</p>
-      <VoiceRecorder api={api} member={elder} notify={notify} onCreated={reload} />
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const touchStart = useRef(null);
+  const reload = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const data = await api("/api/v1/updates?scope=family");
+      const nextUpdates = data.updates || [];
+      setUpdates(nextUpdates);
+      setActiveIndex(index => Math.min(index, Math.max(0, nextUpdates.length - 1)));
+      setLastUpdated(new Date());
+    } finally { setRefreshing(false); }
+  }, [api]);
+  useEffect(() => { reload().catch(error => notify(error.message)); }, [reload, refreshKey]);
+  useEffect(() => {
+    const timer = window.setInterval(() => reload().catch(error => notify(error.message)), 10 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [reload, notify]);
+  if (!currentMember) return null;
+  const activeUpdate = updates[activeIndex];
+  const activeMember = members.find(member => member.id === activeUpdate?.memberId);
+  function move(direction) {
+    reload().catch(error => notify(error.message));
+    setActiveIndex(index => updates.length ? (index + direction + updates.length) % updates.length : 0);
+  }
+  function finishSwipe(event) {
+    if (!touchStart.current) return;
+    const deltaX = event.changedTouches[0].clientX - touchStart.current.x;
+    const deltaY = event.changedTouches[0].clientY - touchStart.current.y;
+    touchStart.current = null;
+    if (Math.abs(deltaX) >= 70 && Math.abs(deltaX) > Math.abs(deltaY)) move(deltaX < 0 ? 1 : -1);
+  }
+  async function enterFullscreen() {
+    if (!document.documentElement.requestFullscreen) return notify(tx("Fullscreen is unavailable in this browser", "当前浏览器无法进入全屏"));
+    try { await document.documentElement.requestFullscreen(); }
+    catch { notify(tx("Fullscreen is unavailable in this browser", "当前浏览器无法进入全屏")); }
+  }
+  return <div className="elder-page" onTouchStart={event => { const touch = event.touches[0]; touchStart.current = { x: touch.clientX, y: touch.clientY }; }} onTouchEnd={finishSwipe}>
+    <header className="elder-controls">
+      <a href="#/feed">← {tx("Standard mode", "普通模式")}</a>
+      <div><button type="button" onClick={() => reload().catch(error => notify(error.message))} disabled={refreshing}>{refreshing ? tx("Updating…", "更新中…") : tx("Update now", "立即更新")}</button><button type="button" onClick={enterFullscreen}>{tx("Enter fullscreen", "进入全屏")}</button></div>
+    </header>
+    <section className="elder-stage" aria-live="polite">
+      <div className="elder-stage-heading"><div><p className="elder-date">{formatFullDate(new Date(), language)}</p><h1>{tx("Family updates", "家人的最新动态")}</h1></div><span>{lastUpdated ? tx(`Updated ${formatClock(lastUpdated, language)}`, `${formatClock(lastUpdated, language)} 已更新`) : tx("Opening family updates…", "正在读取家人动态…")}</span></div>
+      {activeUpdate
+        ? <ElderUpdate update={activeUpdate} member={activeMember} api={api} notify={notify} />
+        : <EmptyState icon="☀" title={tx("No new family messages", "还没有新的家庭消息")} text={tx("New updates from your family will appear here automatically.", "家人发布新动态后，会自动显示在这里。")} />}
+      {updates.length > 1 && <div className="elder-pager"><button type="button" aria-label={tx("Previous update and refresh", "上一条并刷新")} onClick={() => move(-1)}>←</button><span>{activeIndex + 1} / {updates.length} · {tx("Swipe left or right to refresh", "左右滑动即可刷新")}</span><button type="button" aria-label={tx("Next update and refresh", "下一条并刷新")} onClick={() => move(1)}>→</button></div>}
     </section>
-    <section className="elder-summary card">
-      <div className="elder-summary-heading"><span>☀</span><div><p className="eyebrow">FAMILY DAILY</p><h2>{tx("Our family today", "我们家今天")}</h2></div></div>
-      {summary ? <><p className="summary-content">{summary.content}</p><small>{tx(`Based on ${summary.updateCount} family updates`, `根据 ${summary.updateCount} 条家庭动态整理`)} · {summary.date}</small></> : <p className="muted-copy">{tx("Today's family daily has not been generated yet. Once someone shares an update, it can be generated from the family feed.", "今天的家庭日报还没有生成。家人分享近况后，可以在家庭动态页生成。")}</p>}
-    </section>
-    <section><SectionHeading eyebrow={tx("FAMILY MESSAGES", "家人的消息")} title={tx("Recent updates", "最近更新")} />{updates.length ? <div className="elder-update-grid">{updates.map(update => <UpdateCard key={update.id} update={update} member={members.find(item => item.id === update.memberId)} api={api} notify={notify} />)}</div> : <EmptyState icon="☀" title={tx("No new family messages", "还没有新的家庭消息")} text={tx("Updates from your family will appear here.", "家人发布的 Update 会显示在这里。")} />}</section>
+    <HoldVideoRecorder api={api} member={currentMember} notify={notify} onCreated={reload} />
   </div>;
 }
 
-function VoiceRecorder({ api, member, notify, onCreated }) {
+function ElderUpdate({ update, member, api, notify }) {
+  const { language, tx } = useLanguage();
+  return <article className="elder-update">
+    <div className="elder-update-member"><Avatar member={member} large /><div><strong>{member?.name || tx("Family member", "家人")}</strong><span>{formatTime(update.createdAt, language)}</span></div></div>
+    <p>{update.text}</p>
+    {update.type === "image" && update.mediaUrl && <ImageAttachment path={update.mediaUrl} api={api} notify={notify} />}
+    {update.type === "video" && update.mediaUrl && <VideoAttachment path={update.mediaUrl} api={api} notify={notify} />}
+    {update.type === "voice" && <AudioButton path={update.audioUrl} api={api} notify={notify} />}
+  </article>;
+}
+
+function HoldVideoRecorder({ api, member, notify, onCreated }) {
   const { tx } = useLanguage();
   const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState(false);
   const [seconds, setSeconds] = useState(0);
-  const [visibility, setVisibility] = useState("family");
+  const [previewStream, setPreviewStream] = useState(null);
   const state = useRef(null);
+  const starting = useRef(false);
+  const releaseRequested = useRef(false);
+  const preview = useRef(null);
 
   useEffect(() => () => state.current?.stream?.getTracks().forEach(track => track.stop()), []);
+  useEffect(() => { if (preview.current) preview.current.srcObject = previewStream; }, [previewStream]);
   useEffect(() => {
     if (!recording) return;
     const timer = setInterval(() => setSeconds(value => value + 1), 1000);
     return () => clearInterval(timer);
   }, [recording]);
+  useEffect(() => {
+    function keyDown(event) {
+      if (event.code !== "Space" || event.repeat || ["INPUT", "TEXTAREA", "SELECT"].includes(event.target?.tagName)) return;
+      event.preventDefault(); releaseRequested.current = false; start();
+    }
+    function keyUp(event) {
+      if (event.code !== "Space") return;
+      event.preventDefault(); stop();
+    }
+    addEventListener("keydown", keyDown); addEventListener("keyup", keyUp);
+    return () => { removeEventListener("keydown", keyDown); removeEventListener("keyup", keyUp); };
+  });
 
-  async function toggle() {
-    if (recording) return state.current.recorder.stop();
-    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) return notify(tx("This browser does not support recording", "当前浏览器不支持录音"));
+  async function start() {
+    if (recording || busy || starting.current) return;
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) return notify(tx("This browser does not support video recording", "当前浏览器不支持录像"));
+    starting.current = true;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const types = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } } });
+      const types = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
       const mimeType = types.find(type => MediaRecorder.isTypeSupported(type)) || "";
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       const chunks = [];
       recorder.ondataavailable = event => event.data.size && chunks.push(event.data);
       recorder.onstop = async () => {
         stream.getTracks().forEach(track => track.stop());
-        setRecording(false); setBusy(true);
-        const type = recorder.mimeType || "audio/webm";
+        setRecording(false); setPreviewStream(null); setBusy(true);
+        const type = (recorder.mimeType || "video/webm").split(";")[0];
         const form = new FormData();
-        form.append("familyId", FAMILY_ID); form.append("memberId", member.id); form.append("visibility", visibility);
-        form.append("audio", new Blob(chunks, { type }), `update.${type.includes("mp4") ? "m4a" : "webm"}`);
-        try { await api("/api/v1/updates/voice", { method: "POST", body: form }); notify(tx("Your voice entry has been organized and saved", "语音已经整理并保存")); await onCreated(); }
+        const clientMediaID = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+        form.append("deviceId", "elder-web"); form.append("clientMediaId", clientMediaID); form.append("capturedAt", new Date().toISOString());
+        form.append("media", new Blob(chunks, { type }), `elder-update.${type.includes("mp4") ? "mp4" : "webm"}`);
+        try {
+          const imported = await api("/api/v1/me/media-imports", { method: "POST", body: form });
+          if (!imported.updateId) await api(`/api/v1/me/media-imports/${encodeURIComponent(imported.id)}/decision`, { method: "POST", body: JSON.stringify({ visibility: "family", caption: tx("Shared a video message", "分享了一段视频留言") }) });
+          notify(tx("Your video was saved to your Space and shared with the family", "视频已保存到你的 Space，并分享给家人"));
+          await onCreated();
+        }
         catch (error) { notify(error.message); }
         finally { setBusy(false); setSeconds(0); state.current = null; }
       };
       state.current = { recorder, stream };
-      recorder.start(); setSeconds(0); setRecording(true); notify(tx("Recording — speak naturally", "正在录音，请自然地说话"));
-    } catch (error) { notify(error.name === "NotAllowedError" ? tx("Please allow microphone access", "请允许浏览器使用麦克风") : tx("Unable to start recording", "暂时无法开始录音")); }
+      recorder.start(1000); setSeconds(0); setPreviewStream(stream); setRecording(true); notify(tx("Recording — release Space when finished", "正在录像，松开空格键即可结束"));
+      if (releaseRequested.current) recorder.stop();
+    } catch (error) { notify(error.name === "NotAllowedError" ? tx("Please allow camera and microphone access", "请允许浏览器使用摄像头和麦克风") : tx("Unable to start video recording", "暂时无法开始录像")); }
+    finally { starting.current = false; }
   }
-  return <div className="recorder"><button className={`record-orb ${recording ? "recording" : ""}`} disabled={busy} onClick={toggle}><span>{busy ? "…" : recording ? "■" : "●"}</span><strong>{busy ? tx("AI is organizing", "AI 正在整理") : recording ? `${formatDuration(seconds)} · ${tx("Stop recording", "结束录音")}` : tx("Tell today's story", "说说今天的故事")}</strong></button><Visibility value={visibility} onChange={setVisibility} large /></div>;
+  function stop() {
+    releaseRequested.current = true;
+    const recorder = state.current?.recorder;
+    if (recorder?.state === "recording") recorder.stop();
+  }
+  useEffect(() => {
+    if (!recording) return;
+    const limit = window.setTimeout(stop, 90 * 1000);
+    return () => window.clearTimeout(limit);
+  }, [recording]);
+  return <section className={`elder-recorder ${recording ? "recording" : ""}`}>
+    {recording && <video ref={preview} muted playsInline autoPlay className="elder-camera-preview" />}
+    <button type="button" className="hold-record-button" disabled={busy} onPointerDown={event => { event.currentTarget.setPointerCapture?.(event.pointerId); releaseRequested.current = false; start(); }} onPointerUp={stop} onPointerCancel={stop} onContextMenu={event => event.preventDefault()}>
+      <span>{busy ? "…" : recording ? "■" : "●"}</span><strong>{busy ? tx("Saving and sharing…", "正在保存并分享…") : recording ? `${formatDuration(seconds)} · ${tx("Release to send", "松开发送")}` : tx("Hold Space to speak and record", "按住空格键说话并录像")}</strong>
+    </button>
+    <p>{tx("Hold the keyboard Space bar, or press and hold this button. Maximum 90 seconds.", "按住键盘空格键，或按住这个按钮；最长 90 秒。")}</p>
+  </section>;
 }
 
 function DailyCard({ api, summary, onGenerated, notify }) {
@@ -757,6 +844,7 @@ function createAPI(config) {
 }
 
 function formatTime(value, language) { return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en-US", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value)); }
+function formatClock(value, language) { return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en-US", { hour: "2-digit", minute: "2-digit" }).format(value); }
 function formatFileTime(value, language) { return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en-US", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(value)); }
 function formatMediaMonth(value, language) { const [year, month] = value.split("-").map(Number); return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en-US", { year: "numeric", month: "long" }).format(new Date(year, month - 1, 1)); }
 function formatFullDate(value, language) { return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en-US", { month: "long", day: "numeric", weekday: "long" }).format(value); }
