@@ -95,6 +95,7 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/bedtime-stories", a.authorized(a.listBedtimeStories))
 	mux.HandleFunc("GET /api/v1/bedtime-stories/{id}", a.authorized(a.getBedtimeStory))
 	mux.HandleFunc("GET /api/v1/bedtime-stories/{id}/audio", a.authorized(a.serveBedtimeStoryAudio))
+	mux.HandleFunc("POST /api/v1/bedtime-stories/{id}/audio", a.authorized(a.retryBedtimeStoryAudio))
 	a.registerJudgmentRoutes(mux)
 	mux.HandleFunc("GET /space-files/{path...}", a.serveSpaceFile)
 	mux.HandleFunc("GET /api/v1/admin/members", a.adminAuthorized(a.adminListMembers))

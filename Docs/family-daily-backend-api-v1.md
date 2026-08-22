@@ -62,6 +62,7 @@ POST /api/v1/bedtime-stories
 GET  /api/v1/bedtime-stories
 GET  /api/v1/bedtime-stories/{story-id}
 GET  /api/v1/bedtime-stories/{story-id}/audio
+POST /api/v1/bedtime-stories/{story-id}/audio
 GET  /api/v1/me/share-policy
 PUT  /api/v1/me/share-policy
 ```

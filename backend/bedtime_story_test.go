@@ -124,4 +124,9 @@ func TestBedtimeStoryKeepsTextWhenTTSFails(t *testing.T) {
 	if err != nil || stored.Status != "audio_failed" || stored.Content == "" {
 		t.Fatalf("stored failed story = %+v, %v", stored, err)
 	}
+	processor.synthErr = nil
+	retried := requestJSON[BedtimeStory](t, server.Client(), http.MethodPost, server.URL+"/api/v1/bedtime-stories/"+story.ID+"/audio", map[string]any{}, http.StatusOK)
+	if retried.Status != "ready" || retried.AudioURL == "" {
+		t.Fatalf("TTS retry failed: %+v", retried)
+	}
 }

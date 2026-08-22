@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"errors"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -102,10 +103,20 @@ func (a *app) createBedtimeStory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "故事已保存到索引，但暂时无法写入本地文件")
 		return
 	}
+	story, err = a.synthesizeBedtimeStoryAudio(r, story)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "故事已生成，但暂时无法更新音频状态")
+		return
+	}
+	writeJSON(w, http.StatusCreated, story)
+}
+
+func (a *app) synthesizeBedtimeStoryAudio(r *http.Request, story BedtimeStory) (BedtimeStory, error) {
 	wav, synthErr := a.tts.SynthesizeSpeech(r.Context(), story.Content, story.Voice)
 	story.UpdatedAt = time.Now().UTC()
 	audioFile := ""
 	if synthErr != nil {
+		log.Printf("bedtime story %s TTS failed: %v", story.ID, synthErr)
 		story.Status = "audio_failed"
 		story.ErrorMessage = "故事文本已保存；Gemini 暂时无法生成音频"
 	} else {
@@ -118,17 +129,37 @@ func (a *app) createBedtimeStory(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := a.store.finishBedtimeStoryAudio(r.Context(), story, audioFile); err != nil {
-		writeError(w, http.StatusInternalServerError, "故事已生成，但暂时无法更新音频状态")
-		return
+		return BedtimeStory{}, err
 	}
 	if audioFile != "" {
 		story.AudioURL = "/api/v1/bedtime-stories/" + story.ID + "/audio"
 	}
 	if err := persistBedtimeStoryToSpace(a.spacesRoot, story); err != nil {
-		writeError(w, http.StatusInternalServerError, "故事已保存到索引，但暂时无法更新本地文件")
+		return BedtimeStory{}, err
+	}
+	return story, nil
+}
+
+func (a *app) retryBedtimeStoryAudio(w http.ResponseWriter, r *http.Request) {
+	story, err := a.store.getBedtimeStory(r.Context(), r.PathValue("id"), defaultFamilyID)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "没有找到这个睡前故事")
 		return
 	}
-	writeJSON(w, http.StatusCreated, story)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "暂时无法读取睡前故事")
+		return
+	}
+	if story.Status == "ready" {
+		writeJSON(w, http.StatusOK, story)
+		return
+	}
+	story, err = a.synthesizeBedtimeStoryAudio(r, story)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "暂时无法更新故事音频状态")
+		return
+	}
+	writeJSON(w, http.StatusOK, story)
 }
 
 func (a *app) listBedtimeStories(w http.ResponseWriter, r *http.Request) {
