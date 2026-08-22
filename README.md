@@ -76,6 +76,26 @@ GitHub Pages 只托管静态 React 前端。部署后需要在网页的“家庭
 CORS_ALLOWED_ORIGINS=https://your-name.github.io
 ```
 
+## 生产发布
+
+当前家庭试用环境由专用 Mac mini 运行 Go 服务，Cloudflare Tunnel 只把 HTTPS
+请求转到本机回环端口。App 与 API 使用两个公开入口，但权威 SQLite、媒体和
+成员 Space 都留在服务器本地：
+
+- App：`https://family.integ.life`
+- API：`https://family-api.integ.life`
+- 成员 MCP：`https://family-api.integ.life/mcp/members/<member-id>`
+
+从干净的 `main` 发布：
+
+```bash
+./scripts/deploy-mmini.sh
+```
+
+脚本会重新构建 React 静态文件和 arm64 Go 二进制，运行测试，更新 macOS
+LaunchAgent，并验证回环 `/healthz` 与 `/version`。生产配置和令牌只保存在
+服务器的 `~/.config/family-daily/`，不会写入 Git。
+
 所有权威数据都保存在一个本地存储根目录中：SQLite、原始录音、AI 结果和审计历史不会依赖云端数据库。开发环境默认使用 `backend/data`。
 
 生产服务器必须把专用存储盘配置为绝对路径，并在盘内放置标记文件：

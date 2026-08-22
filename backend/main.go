@@ -13,6 +13,12 @@ import (
 	"time"
 )
 
+var (
+	version   = "dev"
+	commit    = "unknown"
+	buildTime = "unknown"
+)
+
 func main() {
 	if err := run(); err != nil {
 		log.Fatal(err)

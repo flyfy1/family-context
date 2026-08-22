@@ -57,6 +57,7 @@ func newApp(store *store, ai audioProcessor, mediaDir, apiToken string) *app {
 func (a *app) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", a.health)
+	mux.HandleFunc("GET /version", a.versionInfo)
 	mux.Handle("GET /media/", a.authorize(http.StripPrefix("/media/", http.FileServer(http.Dir(a.mediaDir)))))
 	mux.HandleFunc("GET /api/v1/questions", a.authorized(a.listQuestions))
 	mux.HandleFunc("POST /api/v1/questions", a.authorized(a.createQuestion))
@@ -152,6 +153,12 @@ func (a *app) authorize(next http.Handler) http.Handler {
 
 func (a *app) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (a *app) versionInfo(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{
+		"version": version, "commit": commit, "buildTime": buildTime,
+	})
 }
 
 func (a *app) createQuestion(w http.ResponseWriter, r *http.Request) {
