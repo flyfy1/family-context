@@ -29,7 +29,7 @@ Android 已沿用同一组 `en` / `zh` 语言代码并提供独立设置，见 [
 
 ```http
 GET /api/v1/daily-summaries/latest?familyId=our-family&language=en
-X-Family-Token: <family-token>
+Authorization: Bearer <member-session>
 ```
 
 生成指定语言的日报：
@@ -37,7 +37,7 @@ X-Family-Token: <family-token>
 ```http
 POST /api/v1/daily-summaries/generate
 Content-Type: application/json
-X-Family-Token: <family-token>
+Authorization: Bearer <member-session>
 
 {
   "familyId": "our-family",

@@ -29,7 +29,7 @@ cd backend
 go run .
 ```
 
-默认监听 `http://localhost:8080`。本地开发使用 `family-daily-local` 作为临时家庭访问令牌；真实家庭试用前必须替换。
+默认监听 `http://localhost:8080`。家庭成员使用各自的用户名和密码登录；本地管理员操作默认使用仅供开发的 `family-daily-admin-local`，真实家庭试用前必须通过 `ADMIN_API_TOKEN` 替换。
 
 后端启动后，[http://localhost:8080](http://localhost:8080) 只提供 API 服务信息。网页端请使用下面的 Vite 开发服务器。
 
@@ -41,7 +41,7 @@ go run .
 - 老人通过大按钮录制语音 Update；
 - 浏览家庭 Feed 和个人 Space；
 - 使用 Gemini 生成并保存 Family Daily；
-- 在浏览器中配置远程 Go API 地址和家庭访问令牌。
+- 在浏览器中配置远程 Go API 地址，并以个人用户名和密码登录。
 
 后端还提供成员用户名/密码登录、管理员 API、成员级会话与集成 Token、成员文字/图片上传、分享 Prompt 配置，以及成员隔离的 MCP Context 接口。网页登录后固定为一个成员身份；独立管理员 Token 只在管理操作时输入。详细契约见 [docs/family-daily-backend-api-v1.md](docs/family-daily-backend-api-v1.md)。
 

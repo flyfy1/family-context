@@ -31,10 +31,10 @@ GET  /api/v1/bedtime-stories/{story-id}/audio
 POST /api/v1/bedtime-stories/{story-id}/audio
 ```
 
-V1 由家庭应用中的家长/照护者发起，沿用家庭访问令牌：
+V1 由家庭应用中已登录的家长/照护者发起，使用其个人登录会话：
 
 ```http
-X-Family-Token: <family-token>
+Authorization: Bearer <member-session>
 ```
 
 ## 生成故事
@@ -42,7 +42,7 @@ X-Family-Token: <family-token>
 ```http
 POST /api/v1/bedtime-stories
 Content-Type: application/json
-X-Family-Token: <family-token>
+Authorization: Bearer <member-session>
 
 {
   "familyId": "our-family",
@@ -100,14 +100,14 @@ TTS 失败仍返回 `201` 和完整故事文本，而不是丢弃已经生成的
 
 ```http
 POST /api/v1/bedtime-stories/{story-id}/audio
-X-Family-Token: <family-token>
+Authorization: Bearer <member-session>
 ```
 
 ## 查询和播放
 
 ```http
 GET /api/v1/bedtime-stories?familyId=our-family&childId=<member-id>&language=en
-X-Family-Token: <family-token>
+Authorization: Bearer <member-session>
 ```
 
 返回最近 50 个故事：
@@ -122,14 +122,14 @@ X-Family-Token: <family-token>
 
 ```http
 GET /api/v1/bedtime-stories/{story-id}
-X-Family-Token: <family-token>
+Authorization: Bearer <member-session>
 ```
 
 播放音频：
 
 ```http
 GET /api/v1/bedtime-stories/{story-id}/audio
-X-Family-Token: <family-token>
+Authorization: Bearer <member-session>
 ```
 
 音频响应为 `audio/wav`。前端如果通过 `fetch` 请求，需要把响应读取成 Blob 后交给 `<audio>` 或 Web Audio API。
