@@ -234,6 +234,9 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
 .elder-update > .audio-button { min-width: 240px; min-height: 58px; align-self: start; justify-content: center; font-size: 16px; }
 .elder-pager { display: flex; align-items: center; justify-content: center; gap: 18px; color: var(--muted); font-size: 12px; }
 .elder-pager button { width: 46px; height: 38px; border: 1px solid var(--line); border-radius: 99px; color: var(--rust-dark); background: var(--card); font-size: 20px; }
+.elder-pager-status { display: flex; align-items: center; gap: 12px; }
+.elder-countdown { display: inline-flex; align-items: baseline; padding: 5px 10px; border-radius: 99px; color: var(--rust-dark); background: rgba(173,76,52,.1); white-space: nowrap; }
+.elder-countdown strong { min-width: 1.5em; font-size: 15px; text-align: right; }
 .elder-recorder { position: relative; min-height: 122px; display: grid; justify-items: center; align-content: center; gap: 8px; padding: 14px clamp(18px, 5vw, 76px) 18px; border-top: 1px solid var(--line); background: rgba(235,225,214,.72); }
 .elder-record-actions { width: min(820px, 100%); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .hold-record-button { min-width: 0; min-height: 64px; display: flex; align-items: center; justify-content: center; gap: 15px; padding: 0 26px; border: 0; border-radius: 99px; color: white; background: var(--rust); box-shadow: 0 14px 30px rgba(173,76,52,.18); user-select: none; -webkit-user-select: none; }
@@ -406,7 +409,7 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
   .member-switcher span, .language-switcher span { display: none; }.member-switcher { min-width: 112px; }.language-switcher { min-width: 88px; }
   .visibility { width: 100%; }.visibility button { flex: 1; }
   .voice-actions { align-items: stretch; flex-direction: column; }.audio-button { width: 100%; justify-content: center; }
-  .elder-controls > div button:first-child { display: none; }.elder-stage { padding-inline: 12px; }.elder-stage-heading > span { font-size: 10px; }.elder-pager { gap: 8px; font-size: 10px; }.elder-pager button { width: 40px; }
+  .elder-controls > div button:first-child { display: none; }.elder-stage { padding-inline: 12px; }.elder-stage-heading > span { font-size: 10px; }.elder-pager { gap: 8px; font-size: 10px; }.elder-pager button { width: 40px; }.elder-pager-status { align-items: stretch; flex-direction: column; gap: 4px; text-align: center; }.elder-countdown { justify-content: center; padding-block: 3px; }
   .elder-record-actions { gap: 7px; }.hold-record-button { gap: 8px; padding-inline: 10px; }.hold-record-button kbd { min-width: 38px; height: 32px; padding-inline: 6px; font-size: 8px; }.hold-record-button strong { font-size: 13px; }.elder-recorder > p { max-width: 330px; text-align: center; font-size: 9px; }
   .nas-bulk-actions { align-items: stretch; flex-direction: column; }.nas-bulk-actions .primary-button { width: 100%; }
   .nas-file-header, .nas-file-row { grid-template-columns: 24px minmax(110px, 1fr) 62px; }.nas-file-header span:nth-child(3), .nas-file-row time { display: none; }

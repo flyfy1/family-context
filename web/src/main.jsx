@@ -8,6 +8,7 @@ import ActivityThreads from "./ActivityThreads";
 import { createAPI, logoutOnUnauthorized } from "./api";
 
 const FAMILY_ID = "our-family";
+const ELDER_SWITCH_SECONDS = 60;
 const ROUTES = ["/", "/feed", "/space", "/elder", "/settings"];
 const colors = ["#AD4C34", "#54706A", "#B47A3C", "#715A75", "#607D4F", "#35677B"];
 const DEFAULT_API_BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
@@ -440,6 +441,7 @@ function ElderView({ api, members, currentMember, notify, refreshKey }) {
   const { language, tx } = useLanguage();
   const [updates, setUpdates] = useState([]);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [secondsUntilNext, setSecondsUntilNext] = useState(ELDER_SWITCH_SECONDS);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const touchStart = useRef(null);
@@ -461,7 +463,21 @@ function ElderView({ api, members, currentMember, notify, refreshKey }) {
   const move = useCallback(direction => {
     reload().catch(error => notify(error.message));
     setActiveIndex(index => updates.length ? (index + direction + updates.length) % updates.length : 0);
+    setSecondsUntilNext(ELDER_SWITCH_SECONDS);
   }, [reload, notify, updates.length]);
+  useEffect(() => {
+    if (updates.length <= 1) {
+      setSecondsUntilNext(ELDER_SWITCH_SECONDS);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setSecondsUntilNext(seconds => seconds - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [secondsUntilNext, updates.length]);
+  useEffect(() => {
+    if (updates.length <= 1 || secondsUntilNext > 0) return;
+    setActiveIndex(index => (index + 1) % updates.length);
+    setSecondsUntilNext(ELDER_SWITCH_SECONDS);
+  }, [secondsUntilNext, updates.length]);
   useEffect(() => {
     function navigate(event) {
       if (["INPUT", "TEXTAREA", "SELECT"].includes(event.target?.tagName)) return;
@@ -496,7 +512,7 @@ function ElderView({ api, members, currentMember, notify, refreshKey }) {
       {activeUpdate
         ? <ElderUpdate update={activeUpdate} member={activeMember} api={api} notify={notify} />
         : <EmptyState icon="☀" title={tx("No new family messages", "还没有新的家庭消息")} text={tx("New updates from your family will appear here automatically.", "家人发布新动态后，会自动显示在这里。")} />}
-      {updates.length > 1 && <div className="elder-pager"><button type="button" aria-label={tx("Previous update and refresh", "上一条并刷新")} onClick={() => move(-1)}>←</button><span>{activeIndex + 1} / {updates.length} · {tx("Use arrow keys or swipe left and right", "用方向键或左右滑动切换")}</span><button type="button" aria-label={tx("Next update and refresh", "下一条并刷新")} onClick={() => move(1)}>→</button></div>}
+      {updates.length > 1 && <div className="elder-pager"><button type="button" aria-label={tx("Previous update and refresh", "上一条并刷新")} onClick={() => move(-1)}>←</button><span className="elder-pager-status"><span>{activeIndex + 1} / {updates.length} · {tx("Use arrow keys or swipe left and right", "用方向键或左右滑动切换")}</span><span className="elder-countdown" role="timer" aria-label={tx(`${secondsUntilNext} seconds until the next update`, `${secondsUntilNext} 秒后切换下一条`)}><strong>{secondsUntilNext}</strong>{tx("s to next update", " 秒后切换下一条")}</span></span><button type="button" aria-label={tx("Next update and refresh", "下一条并刷新")} onClick={() => move(1)}>→</button></div>}
     </section>
     <HoldRecorder api={api} member={currentMember} notify={notify} onCreated={reload} />
   </div>;
