@@ -5,6 +5,7 @@ import LandingPage from "./LandingPage";
 import { CoreJobSettings, NotificationInbox } from "./coreJobs";
 import MemberRoleEditor from "./MemberRoleEditor";
 import ActivityThreads from "./ActivityThreads";
+import { createAPI, isUnauthorized } from "./api";
 
 const FAMILY_ID = "our-family";
 const ROUTES = ["/", "/feed", "/space", "/elder", "/settings"];
@@ -51,6 +52,14 @@ function App() {
   const tx = useMemo(() => (english, chinese) => language === "zh" ? chinese : english, [language]);
   const currentMember = signedInMember;
 
+  const clearSession = useCallback(() => {
+    localStorage.removeItem("fd.sessionToken");
+    setConfig(current => ({ ...current, sessionToken: "", adminToken: "" }));
+    setSignedInMember(null);
+    setMembers([]);
+    setError("");
+  }, []);
+
   useEffect(() => {
     if (route === "/" || !config.sessionToken) { setLoading(false); return; }
     let active = true;
@@ -62,10 +71,14 @@ function App() {
         setMembers(data.members || []);
         setError("");
       })
-      .catch(err => active && setError(err.message))
+      .catch(err => {
+        if (!active) return;
+        if (isUnauthorized(err)) clearSession();
+        else setError(err.message);
+      })
       .finally(() => active && setLoading(false));
     return () => { active = false; };
-  }, [api, config.sessionToken, refreshKey, route]);
+  }, [api, clearSession, config.sessionToken, refreshKey, route]);
 
   useEffect(() => {
     localStorage.setItem("fd.language", language);
@@ -89,9 +102,7 @@ function App() {
 
   async function signOut() {
     try { await api("/api/v1/auth/logout", { method: "POST" }); } catch {}
-    localStorage.removeItem("fd.sessionToken");
-    setConfig(current => ({ ...current, sessionToken: "", adminToken: "" }));
-    setSignedInMember(null); setMembers([]); setError("");
+    clearSession();
   }
 
   const pageProps = { api, members, currentMember, notify, refreshKey, refresh };
@@ -884,24 +895,6 @@ function CardSkeleton() { return <div className="card skeleton"><i /><i /><i /><
 function ConnectionError({ message, onSettings }) { const { tx } = useLanguage(); return <div className="connection-error"><span>!</span><div><strong>{tx("Unable to connect to the family server", "暂时无法连接家庭服务器")}</strong><p>{message}</p></div><button onClick={onSettings}>{tx("Check settings", "检查设置")}</button></div>; }
 function Onboarding({ onStart }) { const { tx } = useLanguage(); return <div className="onboarding"><span className="onboarding-mark">家</span><p className="eyebrow">WELCOME TO FAMILY DAILY</p><h2>{tx("Create your family members", "先创建你的家庭成员")}</h2><p>{tx("Everyone gets a separate local Space, then you can start sharing everyday moments.", "每个人都会获得独立的本地 Space，然后就可以开始分享日常。")}</p><button className="primary-button" onClick={onStart}>{tx("Set up the family →", "开始配置家庭 →")}</button></div>; }
 function MobileNav({ route }) { const { tx } = useLanguage(); return <nav className="mobile-nav"><NavLink to="/feed" route={route} icon="⌂">{tx("Feed", "动态")}</NavLink><NavLink to="/space" route={route} icon="◫">Space</NavLink><NavLink to="/elder" route={route} icon="声">{tx("Elder", "老人")}</NavLink><NavLink to="/settings" route={route} icon="⚙">{tx("Settings", "设置")}</NavLink></nav>; }
-
-function createAPI(config) {
-  return async (path, options = {}) => {
-    const { admin = false, ...fetchOptions } = options;
-    const headers = new Headers(fetchOptions.headers || {});
-    if (admin) headers.set("X-Admin-Token", config.adminToken || ""); else headers.set("Authorization", `Bearer ${config.sessionToken || ""}`);
-    if (fetchOptions.body && !(fetchOptions.body instanceof FormData)) headers.set("Content-Type", "application/json");
-    const response = await fetch(`${config.apiBase}${path}`, { ...fetchOptions, headers });
-    if (options.raw) {
-      if (!response.ok) throw new Error(config.language === "zh" ? "暂时无法读取文件" : "Unable to read the file");
-      return response.blob();
-    }
-    if (response.status === 204) return null;
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(config.language === "zh" ? (body.error || `请求失败（${response.status}）`) : `Request failed (${response.status})`);
-    return body;
-  };
-}
 
 function formatTime(value, language) { return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en-US", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value)); }
 function formatClock(value, language) { return new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en-US", { hour: "2-digit", minute: "2-digit" }).format(value); }
