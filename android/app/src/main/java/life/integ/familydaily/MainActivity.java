@@ -9,6 +9,9 @@ import android.media.MediaPlayer;
 import android.media.MediaRecorder;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -41,6 +44,7 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends android.app.Activity {
     private static final int RECORD_AUDIO_REQUEST = 42;
+    private static final int PHOTO_ACCESS_REQUEST = 43;
     private static final int COLOR_BACKGROUND = Color.rgb(255, 249, 244);
     private static final int COLOR_CARD = Color.WHITE;
     private static final int COLOR_PRIMARY = Color.rgb(185, 79, 50);
@@ -52,6 +56,9 @@ public class MainActivity extends android.app.Activity {
     private EditText questionInput;
     private ProgressBar progress;
     private TextView status;
+    private TextView photoSyncStatus;
+    private Button photoSyncButton;
+    private final Handler handler = new Handler(Looper.getMainLooper());
     private MediaRecorder recorder;
     private File recordingFile;
     private JSONObject pendingRecordQuestion;
@@ -61,6 +68,19 @@ public class MainActivity extends android.app.Activity {
         super.onCreate(savedInstanceState);
         setContentView(buildScreen());
         loadFeed();
+        PhotoSync.schedule(this);
+        refreshPhotoSyncStatus();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        refreshPhotoSyncStatus();
+        if (PhotoSync.preferences(this).getBoolean(PhotoSync.KEY_ENABLED, false)
+                && PhotoSync.isConfigured(this) && PhotoSync.hasImageAccess(this)) {
+            PhotoSync.syncNow(this);
+            pollPhotoSyncStatus(0);
+        }
     }
 
     @Override
@@ -68,6 +88,7 @@ public class MainActivity extends android.app.Activity {
         super.onDestroy();
         releaseRecorder();
         executor.shutdownNow();
+        handler.removeCallbacksAndMessages(null);
     }
 
     private View buildScreen() {
@@ -87,6 +108,30 @@ public class MainActivity extends android.app.Activity {
         TextView intro = text("先问爸爸一个具体的问题。他只需要点一下按钮，就能用语音回答。", 16, COLOR_MUTED);
         intro.setLineSpacing(0, 1.25f);
         root.addView(intro);
+
+        LinearLayout syncCard = card();
+        syncCard.setPadding(dp(18), dp(18), dp(18), dp(18));
+        LinearLayout.LayoutParams syncCardParams = fullWidth();
+        syncCardParams.setMargins(0, dp(24), 0, 0);
+        root.addView(syncCard, syncCardParams);
+        syncCard.addView(text("照片自动备份", 20, COLOR_TEXT));
+        TextView syncIntro = text("授权后，现有和新照片会在打开 App 时补同步，并由系统定期同步到你的私人 NAS 空间。", 14, COLOR_MUTED);
+        syncIntro.setLineSpacing(0, 1.2f);
+        syncIntro.setPadding(0, dp(8), 0, dp(12));
+        syncCard.addView(syncIntro);
+        photoSyncStatus = text("尚未配置", 14, COLOR_MUTED);
+        photoSyncStatus.setPadding(0, 0, 0, dp(10));
+        syncCard.addView(photoSyncStatus);
+        LinearLayout syncActions = new LinearLayout(this);
+        Button configure = secondaryButton("连接 NAS");
+        configure.setOnClickListener(v -> showPhotoSyncSettings());
+        syncActions.addView(configure, new LinearLayout.LayoutParams(0, dp(52), 1));
+        photoSyncButton = primaryButton("开启同步");
+        LinearLayout.LayoutParams syncButtonParams = new LinearLayout.LayoutParams(0, dp(52), 1);
+        syncButtonParams.setMargins(dp(10), 0, 0, 0);
+        photoSyncButton.setOnClickListener(v -> enableOrSyncPhotos());
+        syncActions.addView(photoSyncButton, syncButtonParams);
+        syncCard.addView(syncActions, fullWidth());
 
         LinearLayout askCard = card();
         askCard.setPadding(dp(18), dp(18), dp(18), dp(18));
@@ -290,7 +335,124 @@ public class MainActivity extends android.app.Activity {
             Toast.makeText(this, "权限已开启，请再次点击录音按钮", Toast.LENGTH_LONG).show();
         } else if (requestCode == RECORD_AUDIO_REQUEST) {
             Toast.makeText(this, "需要麦克风权限才能回答", Toast.LENGTH_LONG).show();
+        } else if (requestCode == PHOTO_ACCESS_REQUEST) {
+            if (PhotoSync.hasImageAccess(this)) {
+                PhotoSync.preferences(this).edit().putBoolean(PhotoSync.KEY_ENABLED, true).apply();
+                PhotoSync.schedule(this);
+                PhotoSync.syncNow(this);
+                refreshPhotoSyncStatus();
+                pollPhotoSyncStatus(0);
+            } else {
+                refreshPhotoSyncStatus();
+                Toast.makeText(this, "需要允许照片访问才能自动同步；你也可以只授权选中的照片", Toast.LENGTH_LONG).show();
+            }
         }
+    }
+
+    private void showPhotoSyncSettings() {
+        android.content.SharedPreferences prefs = PhotoSync.preferences(this);
+        LinearLayout fields = vertical();
+        int padding = dp(20);
+        fields.setPadding(padding, 0, padding, 0);
+        EditText baseUrl = new EditText(this);
+        baseUrl.setHint("NAS 服务地址，例如 https://family.example.com");
+        baseUrl.setSingleLine(true);
+        baseUrl.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        baseUrl.setText(prefs.getString(PhotoSync.KEY_BASE_URL, ""));
+        fields.addView(baseUrl, fullWidth());
+        EditText token = new EditText(this);
+        token.setHint("成员令牌");
+        token.setSingleLine(true);
+        token.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        token.setText(prefs.getString(PhotoSync.KEY_MEMBER_TOKEN, ""));
+        fields.addView(token, fullWidth());
+        EditText lookbackDays = new EditText(this);
+        lookbackDays.setHint("同步最近多少天（1-3650）");
+        lookbackDays.setSingleLine(true);
+        lookbackDays.setInputType(InputType.TYPE_CLASS_NUMBER);
+        lookbackDays.setText(Integer.toString(PhotoSync.lookbackDays(this)));
+        fields.addView(lookbackDays, fullWidth());
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("连接你的私人空间")
+                .setMessage("地址必须是手机能访问的 Family Daily 服务；令牌只保存在此 App 的私有数据中。")
+                .setView(fields)
+                .setNegativeButton("取消", null)
+                .setPositiveButton("保存", null)
+                .create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String url = MediaUploadClient.trimTrailingSlash(baseUrl.getText().toString());
+            String memberToken = token.getText().toString().trim();
+            int days;
+            try {
+                days = Integer.parseInt(lookbackDays.getText().toString().trim());
+            } catch (NumberFormatException invalidNumber) {
+                days = 0;
+            }
+            if (!MediaUploadClient.isValidBaseUrl(url) || memberToken.isEmpty()) {
+                Toast.makeText(this, "请填写完整的 http(s) 地址和成员令牌", Toast.LENGTH_LONG).show();
+                return;
+            }
+            if (!PhotoSyncWindow.isValidDays(days)) {
+                Toast.makeText(this, "同步范围请输入 1 到 3650 天", Toast.LENGTH_LONG).show();
+                return;
+            }
+            String oldUrl = prefs.getString(PhotoSync.KEY_BASE_URL, "");
+            String oldToken = prefs.getString(PhotoSync.KEY_MEMBER_TOKEN, "");
+            int oldDays = PhotoSync.lookbackDays(this);
+            android.content.SharedPreferences.Editor edit = prefs.edit()
+                    .putString(PhotoSync.KEY_BASE_URL, url)
+                    .putString(PhotoSync.KEY_MEMBER_TOKEN, memberToken)
+                    .putInt(PhotoSync.KEY_LOOKBACK_DAYS, days)
+                    .putBoolean(PhotoSync.KEY_ENABLED, true)
+                    .putString(PhotoSync.KEY_STATUS, "连接已保存；将同步最近 " + days + " 天的照片");
+            if (!url.equals(oldUrl) || !memberToken.equals(oldToken) || days != oldDays
+                    || !prefs.contains(PhotoSync.KEY_LOOKBACK_DAYS)) {
+                edit.putLong(PhotoSync.KEY_CURSOR_SECONDS, 0).putLong(PhotoSync.KEY_CURSOR_ID, 0);
+            }
+            edit.apply();
+            dialog.dismiss();
+            refreshPhotoSyncStatus();
+            enableOrSyncPhotos();
+        }));
+        dialog.show();
+    }
+
+    private void enableOrSyncPhotos() {
+        if (!PhotoSync.isConfigured(this)) {
+            showPhotoSyncSettings();
+            return;
+        }
+        if (!PhotoSync.hasImageAccess(this)) {
+            requestPermissions(PhotoSync.imagePermissions(), PHOTO_ACCESS_REQUEST);
+            return;
+        }
+        PhotoSync.preferences(this).edit().putBoolean(PhotoSync.KEY_ENABLED, true)
+                .putString(PhotoSync.KEY_STATUS, "已交给系统开始同步……").apply();
+        PhotoSync.schedule(this);
+        PhotoSync.syncNow(this);
+        refreshPhotoSyncStatus();
+        pollPhotoSyncStatus(0);
+    }
+
+    private void refreshPhotoSyncStatus() {
+        if (photoSyncStatus == null || photoSyncButton == null) return;
+        android.content.SharedPreferences prefs = PhotoSync.preferences(this);
+        boolean configured = PhotoSync.isConfigured(this);
+        boolean access = PhotoSync.hasImageAccess(this);
+        String value = prefs.getString(PhotoSync.KEY_STATUS, "");
+        if (!configured) value = "尚未连接 NAS 服务";
+        else if (!access) value = "将同步最近 " + PhotoSync.lookbackDays(this) + " 天；请允许照片访问";
+        else if (value == null || value.isEmpty()) value = "已开启；将同步最近 " + PhotoSync.lookbackDays(this) + " 天";
+        photoSyncStatus.setText(value);
+        photoSyncButton.setText(configured && access ? "立即同步" : "开启同步");
+    }
+
+    private void pollPhotoSyncStatus(int attempt) {
+        if (attempt >= 60) return;
+        handler.postDelayed(() -> {
+            refreshPhotoSyncStatus();
+            pollPhotoSyncStatus(attempt + 1);
+        }, 1000);
     }
 
     private void startRecording(JSONObject question, Button button) {
