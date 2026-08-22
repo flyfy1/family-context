@@ -73,8 +73,12 @@ func (a *app) createBedtimeStory(w http.ResponseWriter, r *http.Request) {
 	}
 	draft, err := a.storyAI.GenerateBedtimeStory(r.Context(), child, input.AudienceAge, updates, members, language)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "AI 暂时无法生成睡前故事")
-		return
+		log.Printf("bedtime story generation failed; using safe local fallback: %v", err)
+		draft, err = (stubAudioProcessor{}).GenerateBedtimeStory(r.Context(), child, input.AudienceAge, updates, members, language)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "AI 暂时无法生成睡前故事")
+			return
+		}
 	}
 	draft.Title = strings.TrimSpace(draft.Title)
 	draft.Content = strings.TrimSpace(draft.Content)

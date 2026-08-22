@@ -16,17 +16,52 @@ type recordingBedtimeProcessor struct {
 	stubAudioProcessor
 	seen      []Update
 	languages []string
+	storyErr  error
 	synthErr  error
 }
 
 func (p *recordingBedtimeProcessor) GenerateBedtimeStory(_ context.Context, child Member, _ int, updates []Update, _ []Member, language string) (BedtimeStoryDraft, error) {
 	p.seen = append([]Update(nil), updates...)
 	p.languages = append(p.languages, "story:"+language)
+	if p.storyErr != nil {
+		return BedtimeStoryDraft{}, p.storyErr
+	}
 	sources := make([]string, 0, len(updates))
 	for _, update := range updates {
 		sources = append(sources, update.ID)
 	}
 	return BedtimeStoryDraft{Title: child.Name + "的月光晚安", Content: "月光轻轻照进窗户，把家人今天分享的快乐变成了一颗温暖的小星星。晚安。", SourceUpdateIDs: sources}, nil
+}
+
+func TestBedtimeStoryFallsBackToSafeLocalTextWhenGeminiFails(t *testing.T) {
+	temp := t.TempDir()
+	store, err := openStore(filepath.Join(temp, "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close() })
+	processor := &recordingBedtimeProcessor{storyErr: errors.New("upstream quota exceeded"), synthErr: errors.New("tts unavailable")}
+	application := newApp(store, processor, filepath.Join(temp, "media"), "test-token")
+	child := Member{ID: "child-fallback", FamilyID: defaultFamilyID, Name: "瓜瓜", Role: "child", Color: "#54706A", CreatedAt: time.Now().UTC()}
+	if err := createMemberSpace(application.spacesRoot, child); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.createMember(context.Background(), child); err != nil {
+		t.Fatal(err)
+	}
+	update := Update{ID: "fallback-source", FamilyID: defaultFamilyID, MemberID: child.ID, Type: "text", Text: "今天搭好了一座积木城堡。", Visibility: "family", Source: "test", CreatedAt: time.Now().UTC()}
+	if err := store.createUpdate(context.Background(), update, ""); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(application.routes())
+	t.Cleanup(server.Close)
+
+	story := requestJSON[BedtimeStory](t, server.Client(), http.MethodPost, server.URL+"/api/v1/bedtime-stories", map[string]any{
+		"childId": child.ID, "language": "zh",
+	}, http.StatusCreated)
+	if story.Title == "" || story.Content == "" || story.Status != "audio_failed" || len(story.SourceUpdateIDs) != 1 || story.SourceUpdateIDs[0] != update.ID {
+		t.Fatalf("unsafe or incomplete fallback story: %+v", story)
+	}
 }
 
 func (p *recordingBedtimeProcessor) SynthesizeSpeech(_ context.Context, _ string, _ string, language string) ([]byte, error) {
