@@ -62,6 +62,7 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/updates/voice", a.authorized(a.createVoiceUpdate))
 	mux.HandleFunc("GET /api/v1/daily-summaries/latest", a.authorized(a.latestDailySummary))
 	mux.HandleFunc("POST /api/v1/daily-summaries/generate", a.authorized(a.generateDailySummary))
+	a.registerJudgmentRoutes(mux)
 	mux.HandleFunc("GET /space-files/{path...}", a.authorized(a.serveSpaceFile))
 	webRoot, err := fs.Sub(embeddedWeb, "web")
 	if err != nil {
