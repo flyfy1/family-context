@@ -398,7 +398,7 @@ function Settings({ api, config, setConfig, members, currentMember, refresh, not
   function saveConnection(event) {
     event.preventDefault();
     const next = { ...form, language: config.language, apiBase: form.apiBase.replace(/\/$/, "") };
-    localStorage.setItem("fd.familyName", next.familyName); localStorage.setItem("fd.apiBase", next.apiBase); localStorage.setItem("fd.token", next.token); localStorage.setItem("fd.adminToken", next.adminToken);
+    localStorage.setItem("fd.familyName", next.familyName); localStorage.setItem("fd.apiBase", next.apiBase); localStorage.setItem("fd.token", next.token); localStorage.setItem("fd.adminToken", next.adminToken || "");
     setConfig(next); notify(tx("Web settings saved in this browser", "网页配置已保存在当前浏览器"));
   }
   async function addMember(event) {
@@ -414,9 +414,70 @@ function Settings({ api, config, setConfig, members, currentMember, refresh, not
     <section className="settings-section card"><div><p className="eyebrow">BROWSER CONFIG</p><h2>{tx("Connection", "连接设置")}</h2><p className="muted-copy">{tx("Administrator and family tokens are stored separately and are used only for member configuration.", "管理员令牌与家庭令牌分开保存，只用于成员配置操作。")}</p></div><form className="settings-form" onSubmit={saveConnection}><label>{tx("Family name", "家庭名称")}<input value={form.familyName} onChange={event => setForm({ ...form, familyName: event.target.value })} required /></label><label>{tx("Backend API address", "后端 API 地址")}<input value={form.apiBase} onChange={event => setForm({ ...form, apiBase: event.target.value })} placeholder={tx("Leave blank locally; use https://api.example.com remotely", "本地留空；远程填写 https://api.example.com")} /></label><label>{tx("Family access token", "家庭访问令牌")}<input type="password" value={form.token} onChange={event => setForm({ ...form, token: event.target.value })} required /></label><label>{tx("Administrator token", "管理员令牌")}<input type="password" value={form.adminToken} onChange={event => setForm({ ...form, adminToken: event.target.value })} placeholder={tx("Required only for administrators", "仅管理员需要填写")} /></label><button className="primary-button">{tx("Save connection", "保存连接")}</button></form></section>
     <section className="settings-section family-tree-section card"><div><p className="eyebrow">FAMILY TREE</p><h2>{tx("Family members", "家庭成员")}</h2><p className="muted-copy">{tx("Administrators have a dedicated badge. Both an administrator identity and administrator token are required to configure members.", "管理员会显示专属标记。只有管理员身份和管理员令牌同时就绪，才能进入成员配置。")}</p></div><div><FamilyTree members={members} />{canManageMembers ? <form className="add-member" onSubmit={addMember}><input value={newMember.name} maxLength="30" onChange={event => setNewMember({ ...newMember, name: event.target.value })} placeholder={tx("Member name", "成员称呼")} required /><select value={newMember.role} onChange={event => setNewMember({ ...newMember, role: event.target.value })}><option value="member">{tx("Family member", "普通成员")}</option><option value="elder">{tx("Elder", "老人")}</option><option value="child">{tx("Child", "孩子")}</option></select><label className="admin-option"><input type="checkbox" checked={newMember.isAdmin} onChange={event => setNewMember({ ...newMember, isAdmin: event.target.checked })} />{tx("Make administrator", "设为管理员")}</label><div className="color-picker">{colors.map(color => <button type="button" aria-label={tx(`Choose color ${color}`, `选择颜色 ${color}`)} key={color} className={newMember.color === color ? "active" : ""} style={{ background: color }} onClick={() => setNewMember({ ...newMember, color })} />)}</div><button className="primary-button" disabled={busy}>{busy ? tx("Creating…", "正在创建…") : tx("+ Add member", "+ 添加成员")}</button></form> : <div className="admin-gate"><strong>{currentMember?.isAdmin ? tx("Administrator token still required", "还需要管理员令牌") : tx("Only administrators can configure members", "只有管理员可以配置成员")}</strong><p>{currentMember?.isAdmin ? tx("Enter the separate administrator token in Connection above.", "请在上方连接设置中填写独立的管理员令牌。") : tx("Switch to a family member with the Administrator badge to reveal member configuration.", "切换到带有“管理员”标记的家庭成员后，才会显示成员配置。")}</p></div>}</div></section>
     {currentMember && <SharePolicySettings api={api} member={currentMember} notify={notify} />}
+    {currentMember && <MCPSessionSettings api={api} config={config} member={currentMember} notify={notify} />}
     <CoreJobSettings apiBase={config.apiBase} familyToken={config.token} language={config.language} members={members} notify={notify} />
-    <section className="future-boundary"><strong>{tx("Next-phase boundary", "下一阶段边界")}</strong><p>{tx("MCP, scheduled member analysis, and camera/NAS data sources will build on these Spaces. This PoC does not expose arbitrary filesystem access or automatically read surveillance footage.", "MCP、成员定时分析任务和家庭摄像头/NAS 数据源会建立在这些独立 Space 上。当前 PoC 不开放任意文件系统访问，也不自动读取监控录像。")}</p></section>
+    <section className="future-boundary"><strong>{tx("Next-phase boundary", "下一阶段边界")}</strong><p>{tx("ChatGPT OAuth login, broader member analysis, and camera/NAS data sources will build on these Spaces. MCP remains limited to each member's context folder and never exposes arbitrary filesystem access or surveillance footage.", "ChatGPT OAuth 登录、更广泛的成员分析和家庭摄像头/NAS 数据源会建立在这些独立 Space 上。MCP 始终限制在每位成员自己的 context 目录，不开放任意文件系统访问，也不读取监控录像。")}</p></section>
   </div>;
+}
+
+function MCPSessionSettings({ api, config, member, notify }) {
+  const { language, tx } = useLanguage();
+  const [sessions, setSessions] = useState([]);
+  const [serverUrl, setServerUrl] = useState("");
+  const [label, setLabel] = useState("Claude Code");
+  const [credential, setCredential] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const canManage = Boolean(config.adminToken);
+
+  async function load() {
+    if (!canManage) { setSessions([]); setServerUrl(""); return; }
+    setLoading(true);
+    try {
+      const result = await api(`/api/v1/admin/members/${member.id}/mcp-sessions`, { admin: true });
+      setSessions(result.sessions || []); setServerUrl(result.serverUrl || "");
+    } catch (error) { notify(error.message); }
+    finally { setLoading(false); }
+  }
+  useEffect(() => { setCredential(null); load(); }, [member.id, config.adminToken, api]);
+
+  async function create(event) {
+    event.preventDefault(); setBusy(true); setCredential(null);
+    try {
+      const result = await api(`/api/v1/admin/members/${member.id}/mcp-sessions`, { admin: true, method: "POST", body: JSON.stringify({ label }) });
+      setCredential(result); setServerUrl(result.serverUrl); setLabel("Claude Code");
+      notify(tx("MCP session created. Save the token now.", "MCP 会话已创建，请立即保存令牌。"));
+      await load();
+    } catch (error) { notify(error.message); }
+    finally { setBusy(false); }
+  }
+  async function revoke(sessionId) {
+    setBusy(true);
+    try {
+      await api(`/api/v1/admin/members/${member.id}/mcp-sessions/${sessionId}`, { admin: true, method: "DELETE" });
+      if (credential?.session?.id === sessionId) setCredential(null);
+      notify(tx("MCP session revoked", "MCP 会话已撤销")); await load();
+    } catch (error) { notify(error.message); }
+    finally { setBusy(false); }
+  }
+  async function copy(value) {
+    try { await navigator.clipboard.writeText(value); notify(tx("Copied", "已复制")); }
+    catch { notify(tx("Copy failed; select the text manually", "复制失败，请手动选择文本")); }
+  }
+
+  const claudeCommand = credential ? `claude mcp add --transport http family-daily-${member.name} ${credential.serverUrl} --header "Authorization: Bearer ${credential.accessToken}"` : "";
+  const activeSessions = sessions.filter(session => !session.revokedAt && new Date(session.expiresAt) > new Date());
+  return <section className="settings-section mcp-settings card">
+    <div><p className="eyebrow">MEMBER MCP</p><div className="policy-member"><Avatar member={member} /><div><h2>{tx(`${member.name}'s AI connection`, `${member.name}的 AI 连接`)}</h2><span>{tx("45-day member session", "45 天成员会话")}</span></div></div><p className="muted-copy">{tx("Each client gets its own revocable session and can reach only this member's context files. Switch identity to manage another member.", "每个客户端使用独立、可撤销的会话，并且只能访问这个成员的 context 文件。切换身份即可管理其他成员。")}</p></div>
+    <div className="mcp-panel">
+      {!canManage ? <div className="mcp-empty"><strong>{tx("Administrator token required", "需要管理员令牌")}</strong><p>{tx("Add the separate administrator token in Connection settings, save, then return here to issue member credentials.", "请先在连接设置中填写独立管理员令牌并保存，再回来签发成员凭证。")}</p></div> : <>
+        <form className="mcp-create" onSubmit={create}><label>{tx("Session name", "会话名称")}<input value={label} maxLength="80" onChange={event => setLabel(event.target.value)} placeholder={tx("Claude Code on Mac", "Mac 上的 Claude Code")} required /></label><button className="primary-button" disabled={busy}>{busy ? tx("Creating…", "正在创建…") : tx("Create 45-day session", "创建 45 天会话")}</button></form>
+        {credential && <div className="mcp-credential"><strong>{tx("Save this token now — it will not be shown again", "请立即保存令牌——之后不会再次显示")}</strong><div className="copy-row"><code>{credential.accessToken}</code><button type="button" onClick={() => copy(credential.accessToken)}>{tx("Copy token", "复制令牌")}</button></div><label>Claude Code<div className="copy-row"><code>{claudeCommand}</code><button type="button" onClick={() => copy(claudeCommand)}>{tx("Copy command", "复制命令")}</button></div></label><label>ChatGPT<div className="copy-row"><code>{credential.serverUrl}</code><button type="button" onClick={() => copy(credential.serverUrl)}>{tx("Copy endpoint", "复制地址")}</button></div></label><p>{tx("In ChatGPT, create a custom MCP app with this endpoint and choose Bearer authentication if your workspace offers it. For stable OAuth login and refresh, the server still needs the next OAuth slice.", "在 ChatGPT 中用这个地址创建自定义 MCP 应用；如果工作区提供 Bearer 认证可直接选择。稳定的 OAuth 登录与刷新仍需要下一步 OAuth 能力。")}</p></div>}
+        <div className="mcp-session-list"><div className="mcp-list-title"><strong>{tx("Active sessions", "有效会话")}</strong><span>{loading ? tx("Loading…", "读取中…") : activeSessions.length}</span></div>{!loading && activeSessions.length === 0 ? <p className="mcp-none">{tx("No active client sessions", "暂无有效的客户端会话")}</p> : activeSessions.map(session => <div className="mcp-session" key={session.id}><div><strong>{session.label}</strong><span>{tx("Expires", "到期")} {new Intl.DateTimeFormat(language === "zh" ? "zh-CN" : "en-US", { dateStyle: "medium" }).format(new Date(session.expiresAt))}</span></div><button type="button" disabled={busy} onClick={() => revoke(session.id)}>{tx("Revoke", "撤销")}</button></div>)}</div>
+        {serverUrl && <p className="mcp-boundary">{tx("Filesystem boundary:", "文件边界：")} <code>spaces/members/{member.id}/context</code> · {tx("no storage root, shell, or cross-member access", "不开放存储根目录、Shell 或跨成员访问")}</p>}
+      </>}
+    </div>
+  </section>;
 }
 
 function SharePolicySettings({ api, member, notify }) {
@@ -492,13 +553,12 @@ function MobileNav({ route }) { const { tx } = useLanguage(); return <nav classN
 
 function createAPI(config) {
   return async (path, options = {}) => {
-    const { admin = false, ...requestOptions } = options;
-    const headers = new Headers(requestOptions.headers || {});
-    headers.set("X-Family-Token", config.token);
-    if (admin && config.adminToken) headers.set("X-Admin-Token", config.adminToken);
-    if (requestOptions.body && !(requestOptions.body instanceof FormData)) headers.set("Content-Type", "application/json");
-    const response = await fetch(`${config.apiBase}${path}`, { ...requestOptions, headers });
-    if (requestOptions.raw) {
+    const { admin = false, ...fetchOptions } = options;
+    const headers = new Headers(fetchOptions.headers || {});
+    if (admin) headers.set("X-Admin-Token", config.adminToken || ""); else headers.set("X-Family-Token", config.token);
+    if (fetchOptions.body && !(fetchOptions.body instanceof FormData)) headers.set("Content-Type", "application/json");
+    const response = await fetch(`${config.apiBase}${path}`, { ...fetchOptions, headers });
+    if (options.raw) {
       if (!response.ok) throw new Error(config.language === "zh" ? "暂时无法读取文件" : "Unable to read the file");
       return response.blob();
     }
