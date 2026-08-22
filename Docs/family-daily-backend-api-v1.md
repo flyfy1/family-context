@@ -65,6 +65,9 @@ GET  /api/v1/bedtime-stories/{story-id}/audio
 POST /api/v1/bedtime-stories/{story-id}/audio
 GET  /api/v1/me/share-policy
 PUT  /api/v1/me/share-policy
+GET  /api/v1/me/mcp-sessions
+POST /api/v1/me/mcp-sessions
+DELETE /api/v1/me/mcp-sessions/{session-id}
 ```
 
 图片上传使用 `multipart/form-data`：
@@ -106,12 +109,30 @@ GET  /mcp/members/{member-id}      # V1 返回 405，不提供 SSE 长连接
 DELETE /mcp/members/{member-id}    # 结束会话
 ```
 
-请求必须包含：
+MCP 端点既接受成员主令牌，也接受单独签发的 MCP 访问令牌。外部客户端应使用 MCP 访问令牌，不应复制成员主令牌：
 
 ```http
-Authorization: Bearer <member-token>
+Authorization: Bearer <fdmcp-token>
 Content-Type: application/json
 ```
+
+成员可以通过 `/api/v1/me/mcp-sessions` 为 ChatGPT、Claude Code 或其他客户端分别创建具名访问会话。管理员也可以通过 `/api/v1/admin/members/{member-id}/mcp-sessions` 代为创建、查看和撤销。
+
+- 默认有效期为 45 天，满足至少 30 天的接入周期；
+- Access Token 只在创建响应中返回一次，SQLite 只保存 SHA-256 哈希；
+- 每个 Token 固定绑定一个成员，无法访问另一个成员的 MCP 端点；
+- 撤销立即生效；旋转成员主令牌时会撤销该成员的所有 MCP 访问会话；
+- Access Token 可跨服务重启继续使用；`Mcp-Session-Id` 只是一次 MCP 协议连接的短期状态，客户端重连时可以重新 `initialize`。
+
+Claude Code 可以直接配置远程 HTTP MCP：
+
+```bash
+claude mcp add --transport http family-daily \
+  https://family-api.example/mcp/members/<member-id> \
+  --header "Authorization: Bearer <fdmcp-token>"
+```
+
+不要把 Token 放进 URL、仓库或聊天消息。ChatGPT 自定义 MCP 应用可以填写同一个远程端点，但面向长期稳定连接的正式接入还需要 OAuth、`offline_access` 和刷新令牌；当前 Bearer 会话切片不伪装成完整的 ChatGPT OAuth 登录。
 
 实现基于 MCP `2025-11-25` Streamable HTTP 的 JSON 响应模式：客户端先调用 `initialize`，保存响应中的 `Mcp-Session-Id`，后续请求携带该 Header。
 
@@ -128,7 +149,7 @@ create_update
 
 文件工具只接受扁平的 `.md`、`.txt` 或 `.json` 文件名，单文件最大 512KB。不能使用绝对路径、`..`、子目录、符号链接、NAS 根路径或执行命令。
 
-这是一种适合本地/NAS PoC 的预注册 Bearer Token 模式。将 MCP 暴露到公网前，必须增加 MCP 规范要求的 OAuth 2.1、Protected Resource Metadata、HTTPS、短期 Access Token、Scope 和刷新令牌轮换。
+这是一种适合受控家庭服务器和 Claude Code 的预注册 Bearer Token 模式。将 MCP 暴露到公网并提供 ChatGPT 登录前，必须增加 OAuth 2.1、Protected Resource Metadata、HTTPS、Scope、`offline_access` 和刷新令牌轮换。
 
 ## 手机自动同步边界
 

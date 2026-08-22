@@ -30,6 +30,10 @@ func openStore(path string) (*store, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := s.migrateMemberMCPSessions(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return s, nil
 }
 

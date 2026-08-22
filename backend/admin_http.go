@@ -113,9 +113,14 @@ func (a *app) adminRotateMemberToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "暂时无法读取家庭成员")
 		return
 	}
+	now := time.Now().UTC()
 	token := newAccessToken()
-	if err := a.store.setMemberTokenHash(r.Context(), member.ID, hashToken(token), time.Now().UTC()); err != nil {
+	if err := a.store.setMemberTokenHash(r.Context(), member.ID, hashToken(token), now); err != nil {
 		writeError(w, http.StatusInternalServerError, "暂时无法更新成员令牌")
+		return
+	}
+	if err := a.store.revokeAllMemberMCPSessions(r.Context(), member.ID, now); err != nil {
+		writeError(w, http.StatusInternalServerError, "成员令牌已更新，但 MCP 会话暂时无法全部撤销")
 		return
 	}
 	a.invalidateMCPSessions(member.ID)

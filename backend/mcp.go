@@ -41,7 +41,7 @@ func (a *app) mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 		writeMCPError(w, nil, http.StatusForbidden, -32000, "Origin is not allowed")
 		return
 	}
-	member, ok := a.authenticateMember(r)
+	member, ok := a.authenticateMCPMember(r)
 	if !ok || member.ID != r.PathValue("id") {
 		w.Header().Set("WWW-Authenticate", `Bearer realm="family-daily-mcp"`)
 		writeMCPError(w, nil, http.StatusUnauthorized, -32001, "Invalid member access token")
