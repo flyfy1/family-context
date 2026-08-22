@@ -10,10 +10,7 @@ import (
 
 func TestTranscriptBackfillProcessesEachMediaOnce(t *testing.T) {
 	storageRoot := t.TempDir()
-	spacesRoot, err := prepareSpacesRoot(storageRoot)
-	if err != nil {
-		t.Fatal(err)
-	}
+	spacesRoot := filepath.Join(storageRoot, "spaces")
 	store, err := openStore(filepath.Join(storageRoot, "family-daily.db"))
 	if err != nil {
 		t.Fatal(err)

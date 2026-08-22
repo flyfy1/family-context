@@ -35,6 +35,9 @@ type transcriptBackfillTarget struct {
 
 func runTranscriptBackfill(ctx context.Context, s *store, ai audioProcessor, storageRoot string) (transcriptBackfillReport, error) {
 	report := transcriptBackfillReport{Found: map[string]int{}, Completed: map[string]int{}, Failures: []transcriptBackfillFailure{}}
+	if _, err := prepareSpacesRoot(storageRoot); err != nil {
+		return report, fmt.Errorf("prepare spaces: %w", err)
+	}
 	targets, err := transcriptBackfillTargets(ctx, s)
 	if err != nil {
 		return report, err
