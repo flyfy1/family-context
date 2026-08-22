@@ -567,6 +567,7 @@ function MCPSessionSettings({ api, config, member, notify }) {
   const { language, tx } = useLanguage();
   const [sessions, setSessions] = useState([]);
   const [serverUrl, setServerUrl] = useState("");
+  const [tools, setTools] = useState([]);
   const [label, setLabel] = useState("Claude Code");
   const [credential, setCredential] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -574,11 +575,11 @@ function MCPSessionSettings({ api, config, member, notify }) {
   const canManage = Boolean(config.adminToken);
 
   async function load() {
-    if (!canManage) { setSessions([]); setServerUrl(""); return; }
+    if (!canManage) { setSessions([]); setServerUrl(""); setTools([]); return; }
     setLoading(true);
     try {
       const result = await api(`/api/v1/admin/members/${member.id}/mcp-sessions`, { admin: true });
-      setSessions(result.sessions || []); setServerUrl(result.serverUrl || "");
+      setSessions(result.sessions || []); setServerUrl(result.serverUrl || ""); setTools(result.tools || []);
     } catch (error) { notify(error.message); }
     finally { setLoading(false); }
   }
@@ -616,6 +617,11 @@ function MCPSessionSettings({ api, config, member, notify }) {
     <div className="mcp-panel">
       <div className="mcp-setup-intro"><strong>{tx("Before connecting", "连接前确认")}</strong><p>{tx(`You are configuring ${member.name}. Create a separate session for every family member and every client; never reuse one member's credential for another.`, `当前配置的是${member.name}。每位家庭成员、每个客户端都要创建独立会话；不要把一个成员的凭证复用给另一个成员。`)}</p></div>
       {!canManage ? <div className="mcp-empty"><strong>{tx("Step 1 · Add the administrator token", "第 1 步 · 填写管理员令牌")}</strong><p>{tx("Add the separate administrator token in Connection settings above and save. Return here to create the selected member's credential; the family access token cannot issue MCP sessions.", "请在上方连接设置中填写独立管理员令牌并保存，然后回来为当前成员创建凭证；家庭访问令牌不能签发 MCP 会话。")}</p></div> : <>
+        {tools.length > 0 && <section className="mcp-capabilities" aria-labelledby={`mcp-capabilities-${member.id}`}>
+          <div className="mcp-capabilities-heading"><div><strong id={`mcp-capabilities-${member.id}`}>{tx("What this MCP can do", "这个 MCP 可以做什么")}</strong><p>{tx(`${tools.length} capabilities reported by the current Family Daily server`, `当前 Family Daily 服务器实际公布了 ${tools.length} 项能力`)}</p></div><span>{tx("LIVE SERVER", "当前服务器")}</span></div>
+          <div className="mcp-capability-grid">{tools.map(tool => { const info = mcpCapabilityInfo(tool, tx); return <article className={`mcp-capability ${info.kind}`} key={tool.name}><div><span>{info.kind === "write" ? tx("WRITE", "写入") : tx("READ", "读取")}</span><code>{tool.name}</code></div><strong>{info.title}</strong><p>{info.description}</p></article>; })}</div>
+          <p className="mcp-capability-note">{tx("Read access includes this member's private Space. Family Space access includes only family-visible updates. Write tools stay inside this member's context and sharing rules.", "读取范围包含当前成员自己的私密 Space；家庭 Space 只包含全家可见动态。写入工具仍受当前成员的 context 目录和分享规则限制。")}</p>
+        </section>}
         <form className="mcp-create" onSubmit={create}><label>{tx("Session name", "会话名称")}<input value={label} maxLength="80" onChange={event => setLabel(event.target.value)} placeholder={tx("Claude Code on Mac", "Mac 上的 Claude Code")} required /></label><button className="primary-button" disabled={busy}>{busy ? tx("Creating…", "正在创建…") : tx("Create 45-day session", "创建 45 天会话")}</button></form>
         <div className="mcp-client-guides">
           <article className="mcp-client-guide">
@@ -645,6 +651,20 @@ function MCPSessionSettings({ api, config, member, notify }) {
       </>}
     </div>
   </section>;
+}
+
+function mcpCapabilityInfo(tool, tx) {
+  const capabilities = {
+    list_updates: ["read", tx("My Space timeline", "我的 Space 动态"), tx("Read this member's private and family-visible updates.", "读取当前成员自己的私密动态和全家可见动态。")],
+    list_family_updates: ["read", tx("Shared Family Space", "家庭共享 Space"), tx("Read recent family-visible updates with author details; never another member's private updates.", "读取最近的全家可见动态和作者信息；不读取其他成员的私密动态。")],
+    get_share_policy: ["read", tx("Personal sharing rules", "个人分享规则"), tx("Read this member's sharing mode and the prompt that guides AI sharing decisions.", "读取当前成员的分享模式，以及用于指导 AI 分享判断的 Prompt。")],
+    list_context_files: ["read", tx("Context file list", "Context 文件列表"), tx("List safe files inside this member's isolated context folder.", "列出当前成员独立 context 目录中的安全文件。")],
+    read_context_file: ["read", tx("Read context", "读取 Context"), tx("Read one permitted Markdown, text, or JSON context file.", "读取一个允许的 Markdown、文本或 JSON context 文件。")],
+    write_context_file: ["write", tx("Save context", "保存 Context"), tx("Create or update one permitted context file, up to 512 KB.", "创建或更新一个允许的 context 文件，最大 512 KB。")],
+    create_update: ["write", tx("Create a family update", "创建家庭动态"), tx("Create a private update; family sharing also requires auto mode and an AI policy check.", "创建私密动态；分享到全家还必须开启自动模式并通过 AI 规则检查。")],
+  };
+  const [kind, title, description] = capabilities[tool.name] || ["read", tool.name, tool.description || tx("Server-provided MCP capability", "服务器提供的 MCP 能力")];
+  return { kind, title, description };
 }
 
 function SharePolicySettings({ api, member, notify }) {
