@@ -38,3 +38,10 @@
 
 - After completing and verifying each self-contained unit of change, commit that unit immediately before starting the next one. Do not wait until the end of the task to batch completed units into one commit.
 - Stage and commit only the files or hunks owned by that unit. Preserve unrelated staged, unstaged, and untracked work.
+
+## Deployment
+
+- After development work is complete and verified, deploy the affected production surface immediately unless the user explicitly excludes deployment or a real deployment blocker prevents it.
+- Frontend changes deploy only through the authoritative GitHub Pages workflow for `https://family.integ.life`; backend changes deploy only to the Mac mini through the established `mmini` release flow.
+- Wait for the deployment process to finish naturally, then verify the relevant behavior on the real production URL. A successful build, push, workflow status, health response, or version endpoint alone is not sufficient production proof.
+- Record the deployed commit, deployment result, and production verification evidence in the task's existing Integ.Life work log.
