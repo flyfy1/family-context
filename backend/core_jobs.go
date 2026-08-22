@@ -17,6 +17,7 @@ type CoreJobRule struct {
 	TargetMemberID   string    `json:"targetMemberId"`
 	TargetMemberName string    `json:"targetMemberName"`
 	Enabled          bool      `json:"enabled"`
+	IncludeTarget    bool      `json:"includeTarget"`
 	InactivityHours  int       `json:"inactivityHours"`
 	ReminderText     string    `json:"reminderText"`
 	UpdatedAt        time.Time `json:"updatedAt"`
@@ -47,6 +48,7 @@ CREATE TABLE IF NOT EXISTS core_job_rules (
   family_id TEXT NOT NULL,
   target_member_id TEXT NOT NULL UNIQUE REFERENCES members(id) ON DELETE CASCADE,
   enabled INTEGER NOT NULL DEFAULT 0,
+  include_target INTEGER NOT NULL DEFAULT 0,
   inactivity_hours INTEGER NOT NULL DEFAULT 24,
   reminder_text TEXT NOT NULL DEFAULT '',
   updated_at TEXT NOT NULL
@@ -68,11 +70,43 @@ CREATE TABLE IF NOT EXISTS notifications (
 CREATE INDEX IF NOT EXISTS idx_core_job_rules_family ON core_job_rules(family_id, enabled);
 CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications(recipient_member_id, created_at DESC);
 `)
+	if err != nil {
+		return err
+	}
+	return ensureCoreJobIncludeTargetColumn(ctx, s.db)
+}
+
+func ensureCoreJobIncludeTargetColumn(ctx context.Context, db *sql.DB) error {
+	rows, err := db.QueryContext(ctx, `PRAGMA table_info(core_job_rules)`)
+	if err != nil {
+		return err
+	}
+	found := false
+	for rows.Next() {
+		var cid int
+		var name, columnType string
+		var notNull, primaryKey int
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			rows.Close()
+			return err
+		}
+		if name == "include_target" {
+			found = true
+		}
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if found {
+		return nil
+	}
+	_, err = db.ExecContext(ctx, `ALTER TABLE core_job_rules ADD COLUMN include_target INTEGER NOT NULL DEFAULT 0`)
 	return err
 }
 
 func (s *store) listCoreJobRules(ctx context.Context, familyID string) ([]CoreJobRule, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT r.id, r.family_id, r.target_member_id, m.name, r.enabled, r.inactivity_hours, r.reminder_text, r.updated_at
+	rows, err := s.db.QueryContext(ctx, `SELECT r.id, r.family_id, r.target_member_id, m.name, r.enabled, r.include_target, r.inactivity_hours, r.reminder_text, r.updated_at
 		FROM core_job_rules r JOIN members m ON m.id = r.target_member_id
 		WHERE r.family_id = ? ORDER BY m.created_at`, familyID)
 	if err != nil {
@@ -82,12 +116,13 @@ func (s *store) listCoreJobRules(ctx context.Context, familyID string) ([]CoreJo
 	rules := make([]CoreJobRule, 0)
 	for rows.Next() {
 		var rule CoreJobRule
-		var enabled int
+		var enabled, includeTarget int
 		var updatedAt string
-		if err := rows.Scan(&rule.ID, &rule.FamilyID, &rule.TargetMemberID, &rule.TargetMemberName, &enabled, &rule.InactivityHours, &rule.ReminderText, &updatedAt); err != nil {
+		if err := rows.Scan(&rule.ID, &rule.FamilyID, &rule.TargetMemberID, &rule.TargetMemberName, &enabled, &includeTarget, &rule.InactivityHours, &rule.ReminderText, &updatedAt); err != nil {
 			return nil, err
 		}
 		rule.Enabled = enabled == 1
+		rule.IncludeTarget = includeTarget == 1
 		rule.UpdatedAt, err = time.Parse(time.RFC3339Nano, updatedAt)
 		if err != nil {
 			return nil, err
@@ -108,24 +143,25 @@ func (s *store) saveCoreJobRule(ctx context.Context, rule CoreJobRule) (CoreJobR
 	if rule.ID == "" {
 		rule.ID = newID()
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO core_job_rules(id, family_id, target_member_id, enabled, inactivity_hours, reminder_text, updated_at)
-		VALUES(?, ?, ?, ?, ?, ?, ?)
+	_, err = s.db.ExecContext(ctx, `INSERT INTO core_job_rules(id, family_id, target_member_id, enabled, include_target, inactivity_hours, reminder_text, updated_at)
+		VALUES(?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(target_member_id) DO UPDATE SET family_id = excluded.family_id, enabled = excluded.enabled,
-		inactivity_hours = excluded.inactivity_hours, reminder_text = excluded.reminder_text, updated_at = excluded.updated_at`,
-		rule.ID, rule.FamilyID, rule.TargetMemberID, rule.Enabled, rule.InactivityHours, rule.ReminderText, rule.UpdatedAt.Format(time.RFC3339Nano))
+		include_target = excluded.include_target, inactivity_hours = excluded.inactivity_hours, reminder_text = excluded.reminder_text, updated_at = excluded.updated_at`,
+		rule.ID, rule.FamilyID, rule.TargetMemberID, rule.Enabled, rule.IncludeTarget, rule.InactivityHours, rule.ReminderText, rule.UpdatedAt.Format(time.RFC3339Nano))
 	if err != nil {
 		return CoreJobRule{}, err
 	}
 	var stored CoreJobRule
-	var enabled int
+	var enabled, includeTarget int
 	var updatedAt string
-	err = s.db.QueryRowContext(ctx, `SELECT r.id, r.family_id, r.target_member_id, m.name, r.enabled, r.inactivity_hours, r.reminder_text, r.updated_at
+	err = s.db.QueryRowContext(ctx, `SELECT r.id, r.family_id, r.target_member_id, m.name, r.enabled, r.include_target, r.inactivity_hours, r.reminder_text, r.updated_at
 		FROM core_job_rules r JOIN members m ON m.id = r.target_member_id WHERE r.target_member_id = ?`, rule.TargetMemberID).
-		Scan(&stored.ID, &stored.FamilyID, &stored.TargetMemberID, &stored.TargetMemberName, &enabled, &stored.InactivityHours, &stored.ReminderText, &updatedAt)
+		Scan(&stored.ID, &stored.FamilyID, &stored.TargetMemberID, &stored.TargetMemberName, &enabled, &includeTarget, &stored.InactivityHours, &stored.ReminderText, &updatedAt)
 	if err != nil {
 		return CoreJobRule{}, err
 	}
 	stored.Enabled = enabled == 1
+	stored.IncludeTarget = includeTarget == 1
 	stored.UpdatedAt, err = time.Parse(time.RFC3339Nano, updatedAt)
 	return stored, err
 }
@@ -155,7 +191,7 @@ func (s *store) runCoreJobs(ctx context.Context, now time.Time) (CoreJobRunResul
 }
 
 func (s *store) enabledCoreJobRules(ctx context.Context) ([]CoreJobRule, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT r.id, r.family_id, r.target_member_id, m.name, r.enabled, r.inactivity_hours, r.reminder_text, r.updated_at
+	rows, err := s.db.QueryContext(ctx, `SELECT r.id, r.family_id, r.target_member_id, m.name, r.enabled, r.include_target, r.inactivity_hours, r.reminder_text, r.updated_at
 		FROM core_job_rules r JOIN members m ON m.id = r.target_member_id WHERE r.enabled = 1`)
 	if err != nil {
 		return nil, err
@@ -164,12 +200,13 @@ func (s *store) enabledCoreJobRules(ctx context.Context) ([]CoreJobRule, error) 
 	rules := make([]CoreJobRule, 0)
 	for rows.Next() {
 		var rule CoreJobRule
-		var enabled int
+		var enabled, includeTarget int
 		var updatedAt string
-		if err := rows.Scan(&rule.ID, &rule.FamilyID, &rule.TargetMemberID, &rule.TargetMemberName, &enabled, &rule.InactivityHours, &rule.ReminderText, &updatedAt); err != nil {
+		if err := rows.Scan(&rule.ID, &rule.FamilyID, &rule.TargetMemberID, &rule.TargetMemberName, &enabled, &includeTarget, &rule.InactivityHours, &rule.ReminderText, &updatedAt); err != nil {
 			return nil, err
 		}
 		rule.Enabled = enabled == 1
+		rule.IncludeTarget = includeTarget == 1
 		rule.UpdatedAt, err = time.Parse(time.RFC3339Nano, updatedAt)
 		if err != nil {
 			return nil, err
@@ -192,7 +229,14 @@ func (s *store) memberLastActivity(ctx context.Context, memberID string) (time.T
 }
 
 func (s *store) createInactivityNotifications(ctx context.Context, rule CoreJobRule, lastActivity, now time.Time) (int, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id FROM members WHERE family_id = ? AND id != ? ORDER BY created_at`, rule.FamilyID, rule.TargetMemberID)
+	query := `SELECT id FROM members WHERE family_id = ?`
+	args := []any{rule.FamilyID}
+	if !rule.IncludeTarget {
+		query += ` AND id != ?`
+		args = append(args, rule.TargetMemberID)
+	}
+	query += ` ORDER BY created_at`
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -208,13 +252,15 @@ func (s *store) createInactivityNotifications(ctx context.Context, rule CoreJobR
 	if err := rows.Close(); err != nil {
 		return 0, err
 	}
-	message := strings.TrimSpace(rule.ReminderText)
-	if message == "" {
-		message = fmt.Sprintf("%s 已经 %d 小时没有发布新动态了，方便时请联系一下。", rule.TargetMemberName, rule.InactivityHours)
-	}
 	incidentKey := "no-post:" + rule.ID + ":" + lastActivity.UTC().Format(time.RFC3339Nano)
 	created := 0
 	for _, recipientID := range recipients {
+		message := strings.TrimSpace(rule.ReminderText)
+		if message == "" && recipientID == rule.TargetMemberID {
+			message = fmt.Sprintf("你已经 %d 小时没有发布新动态了，方便时分享一下近况，让家人放心。", rule.InactivityHours)
+		} else if message == "" {
+			message = fmt.Sprintf("%s 已经 %d 小时没有发布新动态了，方便时请联系一下。", rule.TargetMemberName, rule.InactivityHours)
+		}
 		res, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO notifications(id, family_id, recipient_member_id, subject_member_id, type, message, incident_key, created_at)
 			VALUES(?, ?, ?, ?, 'member_inactive', ?, ?, ?)`, newID(), rule.FamilyID, recipientID, rule.TargetMemberID, message, incidentKey, now.UTC().Format(time.RFC3339Nano))
 		if err != nil {
@@ -297,6 +343,7 @@ func (a *app) adminSaveCoreJobRule(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		FamilyID        string `json:"familyId"`
 		Enabled         bool   `json:"enabled"`
+		IncludeTarget   bool   `json:"includeTarget"`
 		InactivityHours int    `json:"inactivityHours"`
 		ReminderText    string `json:"reminderText"`
 	}
@@ -314,7 +361,7 @@ func (a *app) adminSaveCoreJobRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rule, err := a.store.saveCoreJobRule(r.Context(), CoreJobRule{FamilyID: input.FamilyID, TargetMemberID: memberID,
-		Enabled: input.Enabled, InactivityHours: input.InactivityHours, ReminderText: input.ReminderText, UpdatedAt: time.Now().UTC()})
+		Enabled: input.Enabled, IncludeTarget: input.IncludeTarget, InactivityHours: input.InactivityHours, ReminderText: input.ReminderText, UpdatedAt: time.Now().UTC()})
 	if errors.Is(err, sql.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "没有找到这个家庭成员")
 		return

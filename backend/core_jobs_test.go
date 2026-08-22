@@ -2,12 +2,56 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
 	"time"
 )
+
+func TestCoreJobMigrationAddsIncludeTargetToExistingRules(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`CREATE TABLE core_job_rules (
+		id TEXT PRIMARY KEY, family_id TEXT NOT NULL, target_member_id TEXT NOT NULL UNIQUE,
+		enabled INTEGER NOT NULL DEFAULT 0, inactivity_hours INTEGER NOT NULL DEFAULT 24,
+		reminder_text TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL
+	)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, err := openStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close() })
+	rows, err := store.db.Query(`PRAGMA table_info(core_job_rules)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	found := false
+	for rows.Next() {
+		var cid int
+		var name, columnType string
+		var notNull, primaryKey int
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			t.Fatal(err)
+		}
+		found = found || name == "include_target"
+	}
+	if !found {
+		t.Fatal("include_target column was not added")
+	}
+}
 
 func TestNoPostCoreJobDetectsDeduplicatesAndResetsAfterActivity(t *testing.T) {
 	store, err := openStore(filepath.Join(t.TempDir(), "test.db"))
@@ -60,6 +104,18 @@ func TestNoPostCoreJobDetectsDeduplicatesAndResetsAfterActivity(t *testing.T) {
 	if notifications, err := store.listNotifications(ctx, defaultFamilyID, subject.ID); err != nil || len(notifications) != 0 {
 		t.Fatalf("subject received own reminder: %+v err=%v", notifications, err)
 	}
+	rule.IncludeTarget = true
+	rule.UpdatedAt = now.Add(90 * time.Minute)
+	if _, err := store.saveCoreJobRule(ctx, rule); err != nil {
+		t.Fatal(err)
+	}
+	result, err = store.runCoreJobs(ctx, now.Add(90*time.Minute))
+	if err != nil || result.NotificationsCreated != 1 {
+		t.Fatalf("including subject in existing quiet period result=%+v err=%v", result, err)
+	}
+	if notifications, err := store.listNotifications(ctx, defaultFamilyID, subject.ID); err != nil || len(notifications) != 1 {
+		t.Fatalf("subject reminder missing: %+v err=%v", notifications, err)
+	}
 
 	activityAt := now.Add(2 * time.Hour)
 	if err := store.createUpdate(ctx, Update{ID: "new-activity", FamilyID: defaultFamilyID, MemberID: subject.ID, Type: "text",
@@ -71,7 +127,7 @@ func TestNoPostCoreJobDetectsDeduplicatesAndResetsAfterActivity(t *testing.T) {
 		t.Fatalf("recent private activity should count result=%+v err=%v", result, err)
 	}
 	result, err = store.runCoreJobs(ctx, activityAt.Add(24*time.Hour))
-	if err != nil || result.NotificationsCreated != 2 {
+	if err != nil || result.NotificationsCreated != 3 {
 		t.Fatalf("new quiet period result=%+v err=%v", result, err)
 	}
 }
@@ -107,14 +163,14 @@ func TestCoreJobAdminConfigurationAndRecipientAPI(t *testing.T) {
 	}
 
 	rule := requestScopedJSON[CoreJobRule](t, server.Client(), http.MethodPut, server.URL+"/api/v1/admin/core-job-rules/elder",
-		map[string]any{"familyId": defaultFamilyID, "enabled": true, "inactivityHours": 24, "reminderText": "请联系爸爸确认近况。"},
+		map[string]any{"familyId": defaultFamilyID, "enabled": true, "includeTarget": true, "inactivityHours": 24, "reminderText": "请分享或联系爸爸确认近况。"},
 		"X-Admin-Token", "admin-token", http.StatusOK)
-	if !rule.Enabled || rule.TargetMemberName != "爸爸" {
+	if !rule.Enabled || !rule.IncludeTarget || rule.TargetMemberName != "爸爸" {
 		t.Fatalf("unexpected saved rule: %+v", rule)
 	}
 	result := requestScopedJSON[CoreJobRunResult](t, server.Client(), http.MethodPost, server.URL+"/api/v1/admin/core-jobs/run", map[string]any{},
 		"X-Admin-Token", "admin-token", http.StatusOK)
-	if result.NotificationsCreated != 1 {
+	if result.NotificationsCreated != 2 {
 		t.Fatalf("unexpected run result: %+v", result)
 	}
 	notifications := requestScopedJSON[struct {
@@ -123,5 +179,12 @@ func TestCoreJobAdminConfigurationAndRecipientAPI(t *testing.T) {
 		"X-Family-Token", "family-token", http.StatusOK)
 	if len(notifications.Notifications) != 1 || notifications.Notifications[0].RecipientMemberID != "family" {
 		t.Fatalf("unexpected notifications: %+v", notifications.Notifications)
+	}
+	subjectNotifications := requestScopedJSON[struct {
+		Notifications []Notification `json:"notifications"`
+	}](t, server.Client(), http.MethodGet, server.URL+"/api/v1/notifications?memberId=elder", nil,
+		"X-Family-Token", "family-token", http.StatusOK)
+	if len(subjectNotifications.Notifications) != 1 || subjectNotifications.Notifications[0].RecipientMemberID != "elder" {
+		t.Fatalf("unexpected subject notifications: %+v", subjectNotifications.Notifications)
 	}
 }

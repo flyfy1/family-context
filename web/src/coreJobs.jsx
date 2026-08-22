@@ -53,7 +53,7 @@ export function CoreJobSettings({ apiBase, familyToken, language, members, notif
   const [adminToken, setAdminToken] = useState(() => localStorage.getItem("fd.adminToken") || familyToken || "");
   const [selectedMemberID, setSelectedMemberID] = useState("");
   const [rules, setRules] = useState({});
-  const [draft, setDraft] = useState({ enabled: false, inactivityHours: 24, reminderText: "" });
+  const [draft, setDraft] = useState({ enabled: false, includeTarget: false, inactivityHours: 24, reminderText: "" });
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const selectedMember = useMemo(() => members.find(member => member.id === selectedMemberID), [members, selectedMemberID]);
@@ -66,8 +66,8 @@ export function CoreJobSettings({ apiBase, familyToken, language, members, notif
 
   useEffect(() => {
     const rule = rules[selectedMemberID];
-    setDraft(rule ? { enabled: rule.enabled, inactivityHours: rule.inactivityHours, reminderText: rule.reminderText || "" }
-      : { enabled: false, inactivityHours: 24, reminderText: "" });
+    setDraft(rule ? { enabled: rule.enabled, includeTarget: Boolean(rule.includeTarget), inactivityHours: rule.inactivityHours, reminderText: rule.reminderText || "" }
+      : { enabled: false, includeTarget: false, inactivityHours: 24, reminderText: "" });
   }, [selectedMemberID, rules]);
 
   async function connect() {
@@ -106,8 +106,8 @@ export function CoreJobSettings({ apiBase, familyToken, language, members, notif
       <p className="eyebrow">CORE JOB · ANOMALY DETECTION</p>
       <h2>{text(language, "Family care detection", "家庭关怀检测")}</h2>
       <p className="muted-copy">{text(language,
-        "Detect a long gap in one member's posts and remind everyone else once per quiet period.",
-        "检测某位成员长时间没有发布新内容，并在每次沉默周期中只提醒其他家庭成员一次。")}</p>
+        "Detect a long gap in one member's posts and send one reminder per quiet period to the configured recipients.",
+        "检测某位成员长时间没有发布新内容，并在每次沉默周期中向配置的收件人提醒一次。")}</p>
     </div>
     <div className="core-job-panel">
       <div className="admin-connection">
@@ -117,6 +117,7 @@ export function CoreJobSettings({ apiBase, familyToken, language, members, notif
       <form className="core-job-form" onSubmit={save}>
         <label>{text(language, "Member to watch", "检测对象")}<select value={selectedMemberID} onChange={event => setSelectedMemberID(event.target.value)}>{members.map(member => <option key={member.id} value={member.id}>{member.name}{member.role === "elder" ? text(language, " · Elder", " · 老人") : ""}</option>)}</select></label>
         <label className="core-job-toggle"><input type="checkbox" checked={draft.enabled} onChange={event => setDraft({ ...draft, enabled: event.target.checked })} /><span><strong>{text(language, "Enable no-post detection", "开启未发帖检测")}</strong><small>{text(language, "Private posts count as activity, but their content stays private.", "私密记录也计为活跃，但其内容不会被分享。")}</small></span></label>
+        <label className="core-job-toggle"><input type="checkbox" checked={draft.includeTarget} onChange={event => setDraft({ ...draft, includeTarget: event.target.checked })} /><span><strong>{text(language, "Also remind the detected member", "同时提醒被检测者本人")}</strong><small>{text(language, "They will receive the same custom message, or a self-friendly default reminder.", "本人会收到相同的自定义文案；未自定义时使用适合本人阅读的提醒。")}</small></span></label>
         <label>{text(language, "Remind after", "多久未发布后提醒")}<span className="hours-input"><input type="number" min="1" max="720" value={draft.inactivityHours} onChange={event => setDraft({ ...draft, inactivityHours: event.target.value })} /><small>{text(language, "hours", "小时")}</small></span></label>
         <label>{text(language, "Reminder message (optional)", "提醒内容（可选）")}<textarea rows="3" maxLength="300" value={draft.reminderText} onChange={event => setDraft({ ...draft, reminderText: event.target.value })} placeholder={selectedMember ? text(language, `Please check in with ${selectedMember.name}.`, `方便时请联系一下${selectedMember.name}。`) : ""} /></label>
         <button className="primary-button" disabled={busy || !adminToken.trim() || !selectedMemberID}>{busy ? text(language, "Saving and checking…", "正在保存并检测…") : text(language, "Save and run detection", "保存并立即检测")}</button>
