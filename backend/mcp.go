@@ -43,7 +43,8 @@ func (a *app) mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 	}
 	member, ok := a.authenticateMCPMember(r)
 	if !ok || member.ID != r.PathValue("id") {
-		w.Header().Set("WWW-Authenticate", `Bearer realm="family-daily-mcp"`)
+		metadataURL := publicBaseURL(r) + "/.well-known/oauth-protected-resource/mcp/members/" + r.PathValue("id")
+		w.Header().Set("WWW-Authenticate", `Bearer realm="family-daily-mcp", resource_metadata="`+metadataURL+`", scope="mcp:context"`)
 		writeMCPError(w, nil, http.StatusUnauthorized, -32001, "Invalid member access token")
 		return
 	}

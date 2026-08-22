@@ -51,6 +51,9 @@ func run() error {
 		if adminToken == "" || secureEqual(adminToken, apiToken) {
 			return errors.New("production requires ADMIN_API_TOKEN distinct from FAMILY_API_TOKEN")
 		}
+		if !validProductionPublicBaseURL(os.Getenv("PUBLIC_BASE_URL")) {
+			return errors.New("production requires PUBLIC_BASE_URL as an HTTPS origin")
+		}
 	}
 	app := newApp(store, ai, filepath.Join(dataDir, "media"), apiToken)
 	server := &http.Server{

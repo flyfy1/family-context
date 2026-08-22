@@ -123,6 +123,10 @@ func (a *app) authenticateMCPMember(r *http.Request) (Member, bool) {
 func newMCPAccessToken() string { return "fdmcp_" + newID() + newID() }
 
 func mcpServerURL(r *http.Request, memberID string) string {
+	return publicBaseURL(r) + "/mcp/members/" + memberID
+}
+
+func publicBaseURL(r *http.Request) string {
 	base := strings.TrimRight(strings.TrimSpace(envOr("PUBLIC_BASE_URL", "")), "/")
 	if base == "" {
 		scheme := "http"
@@ -133,5 +137,5 @@ func mcpServerURL(r *http.Request, memberID string) string {
 		}
 		base = scheme + "://" + r.Host
 	}
-	return base + "/mcp/members/" + memberID
+	return base
 }

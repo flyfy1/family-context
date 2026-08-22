@@ -230,8 +230,9 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
 .mcp-create label { flex: 1; display: grid; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 700; }
 .mcp-create input { width: 100%; min-height: 43px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; outline: 0; color: var(--ink); background: #faf6f0; }
 .mcp-create input:focus { border-color: var(--rust); box-shadow: 0 0 0 4px rgba(173,76,52,.08); }
-.mcp-empty, .mcp-credential { padding: 15px; border-radius: 12px; background: #faf6f0; }
-.mcp-empty p, .mcp-credential p { margin: 6px 0 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
+.mcp-empty, .mcp-credential, .mcp-connect-guide { padding: 15px; border-radius: 12px; background: #faf6f0; }
+.mcp-empty p, .mcp-credential p, .mcp-connect-guide p { margin: 6px 0 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
+.mcp-connect-guide { display: grid; gap: 9px; border: 1px solid rgba(84,112,106,.2); background: rgba(97,114,105,.07); }.mcp-connect-guide > strong { font-size: 12px; }
 .mcp-credential { display: grid; gap: 11px; border: 1px solid rgba(173,76,52,.24); background: #fbefe8; }
 .mcp-credential > strong { color: var(--rust-dark); font-size: 12px; }
 .mcp-credential label { display: grid; gap: 5px; color: var(--muted); font-size: 10px; font-weight: 700; }

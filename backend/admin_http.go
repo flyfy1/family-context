@@ -123,6 +123,10 @@ func (a *app) adminRotateMemberToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "成员令牌已更新，但 MCP 会话暂时无法全部撤销")
 		return
 	}
+	if err := a.store.revokeAllMCPOAuthRefreshTokens(r.Context(), member.ID, now); err != nil {
+		writeError(w, http.StatusInternalServerError, "成员令牌已更新，但 MCP OAuth 刷新授权暂时无法全部撤销")
+		return
+	}
 	a.invalidateMCPSessions(member.ID)
 	writeJSON(w, http.StatusOK, MemberCredential{Member: member, AccessToken: token})
 }

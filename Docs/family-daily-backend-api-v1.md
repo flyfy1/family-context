@@ -132,7 +132,22 @@ claude mcp add --transport http family-daily \
   --header "Authorization: Bearer <fdmcp-token>"
 ```
 
-不要把 Token 放进 URL、仓库或聊天消息。ChatGPT 自定义 MCP 应用可以填写同一个远程端点，但面向长期稳定连接的正式接入还需要 OAuth、`offline_access` 和刷新令牌；当前 Bearer 会话切片不伪装成完整的 ChatGPT OAuth 登录。
+不要把 Token 放进 URL、仓库或聊天消息。
+
+ChatGPT 自定义 MCP 应用填写同一个远程端点并选择 OAuth。后端提供：
+
+```text
+GET  /.well-known/oauth-protected-resource/mcp/members/{member-id}
+GET  /.well-known/oauth-authorization-server
+POST /oauth/register
+GET  /oauth/authorize
+POST /oauth/authorize
+POST /oauth/token
+```
+
+实现使用 Authorization Code + PKCE S256、Resource Indicator、动态客户端注册、一次性五分钟授权码、一小时 Access Token，以及轮换的 60 天 Refresh Token。授权页面接受该成员的主令牌或尚未撤销/过期的 `fdmcp_` 会话令牌，并再次校验令牌成员必须与 `resource` 中的成员一致。`offline_access` 会返回 Refresh Token；旧 Refresh Token 在轮换后立即失效。旋转成员主令牌时，会同时撤销该成员的 Bearer 会话、短期 Access Token 和所有 OAuth Refresh Token。
+
+生产环境必须设置 HTTPS origin 形式的 `PUBLIC_BASE_URL`，否则后端拒绝启动。它用于生成 MCP Endpoint、Protected Resource Metadata、Issuer 和 OAuth 回调发现信息，不能依赖外部请求传入的 Host 猜测生产地址。
 
 实现基于 MCP `2025-11-25` Streamable HTTP 的 JSON 响应模式：客户端先调用 `initialize`，保存响应中的 `Mcp-Session-Id`，后续请求携带该 Header。
 
@@ -149,7 +164,9 @@ create_update
 
 文件工具只接受扁平的 `.md`、`.txt` 或 `.json` 文件名，单文件最大 512KB。不能使用绝对路径、`..`、子目录、符号链接、NAS 根路径或执行命令。
 
-这是一种适合受控家庭服务器和 Claude Code 的预注册 Bearer Token 模式。将 MCP 暴露到公网并提供 ChatGPT 登录前，必须增加 OAuth 2.1、Protected Resource Metadata、HTTPS、Scope、`offline_access` 和刷新令牌轮换。
+Claude Code 使用具名 Bearer 会话；ChatGPT 使用 OAuth 发现、PKCE 和轮换 Refresh Token。两种入口最终都只解析为一个成员身份，文件工具仍然只能访问该成员的 `context/`。
+
+兼容性依据：[MCP 2025-11-25 Authorization](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization)、[OpenAI MCP 文档](https://developers.openai.com/api/docs/mcp/) 和 [Claude Code MCP 文档](https://code.claude.com/docs/id/mcp)。
 
 ## 手机自动同步边界
 
