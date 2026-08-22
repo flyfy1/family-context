@@ -76,13 +76,13 @@ function App() {
     <Sidebar route={route} familyName={config.familyName} />
     <main className="main-shell">
       <Topbar route={route} members={members} currentMember={currentMember} onMemberChange={setCurrentMemberId} />
-      {error && <ConnectionError message={error} onSettings={() => { location.hash = "/settings"; }} />}
+      {error && route !== "/settings" && <ConnectionError message={error} onSettings={() => { location.hash = "/settings"; }} />}
+      {route === "/settings" && <Settings api={api} config={config} setConfig={setConfig} members={members} refresh={refresh} notify={notify} />}
       {!error && !loading && members.length === 0 && route !== "/settings" && <Onboarding onStart={() => { location.hash = "/settings"; }} />}
-      {!error && (members.length > 0 || route === "/settings") && <>
+      {!error && members.length > 0 && route !== "/settings" && <>
         {route === "/feed" && <FamilyFeed {...pageProps} />}
         {route === "/space" && <MemberSpace {...pageProps} />}
         {route === "/elder" && <ElderView {...pageProps} />}
-        {route === "/settings" && <Settings api={api} config={config} setConfig={setConfig} members={members} refresh={refresh} notify={notify} />}
       </>}
       {loading && <PageLoading />}
     </main>
