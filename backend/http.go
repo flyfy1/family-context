@@ -121,6 +121,7 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("PUT /api/v1/admin/scheduled-jobs/{id}", a.adminAuthorized(a.adminUpdateScheduledJob))
 	mux.HandleFunc("DELETE /api/v1/admin/scheduled-jobs/{id}", a.adminAuthorized(a.adminDeleteScheduledJob))
 	mux.HandleFunc("POST /api/v1/admin/core-jobs/run", a.adminAuthorized(a.adminRunCoreJobs))
+	mux.HandleFunc("POST /api/v1/admin/notifications/broadcast", a.adminAuthorized(a.adminBroadcastNotification))
 	mux.HandleFunc("GET /api/v1/notifications", a.authorized(a.listMemberNotifications))
 	mux.HandleFunc("POST /api/v1/notifications/{id}/read", a.authorized(a.readMemberNotification))
 	mux.HandleFunc("GET /api/v1/me", a.memberAuthorized(a.getMe))

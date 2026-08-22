@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -31,7 +32,9 @@ type Notification struct {
 	SubjectMemberID   string     `json:"subjectMemberId"`
 	SubjectMemberName string     `json:"subjectMemberName"`
 	Type              string     `json:"type"`
+	Title             string     `json:"title,omitempty"`
 	Message           string     `json:"message"`
+	ActionURL         string     `json:"actionUrl,omitempty"`
 	CreatedAt         time.Time  `json:"createdAt"`
 	ReadAt            *time.Time `json:"readAt,omitempty"`
 }
@@ -84,7 +87,41 @@ CREATE TABLE IF NOT EXISTS core_job_rule_recipients (
 	if err := ensureCoreJobIncludeTargetColumn(ctx, s.db); err != nil {
 		return err
 	}
+	if err := ensureNotificationDeliveryColumns(ctx, s.db); err != nil {
+		return err
+	}
 	return s.migrateScheduledJobs(ctx)
+}
+
+func ensureNotificationDeliveryColumns(ctx context.Context, db *sql.DB) error {
+	rows, err := db.QueryContext(ctx, `PRAGMA table_info(notifications)`)
+	if err != nil {
+		return err
+	}
+	found := map[string]bool{}
+	for rows.Next() {
+		var cid int
+		var name, columnType string
+		var notNull, primaryKey int
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			rows.Close()
+			return err
+		}
+		found[name] = true
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, column := range []string{"title", "action_url"} {
+		if found[column] {
+			continue
+		}
+		if _, err := db.ExecContext(ctx, `ALTER TABLE notifications ADD COLUMN `+column+` TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func ensureCoreJobIncludeTargetColumn(ctx context.Context, db *sql.DB) error {
@@ -335,7 +372,7 @@ func (s *store) listNotifications(ctx context.Context, familyID, memberID string
 		}
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT n.id, n.family_id, n.recipient_member_id, n.subject_member_id, m.name, n.type, n.message, n.created_at, n.read_at
+	rows, err := s.db.QueryContext(ctx, `SELECT n.id, n.family_id, n.recipient_member_id, n.subject_member_id, m.name, n.type, n.title, n.message, n.action_url, n.created_at, n.read_at
 		FROM notifications n JOIN members m ON m.id = n.subject_member_id
 		WHERE n.family_id = ? AND n.recipient_member_id = ? ORDER BY n.created_at DESC LIMIT 50`, familyID, memberID)
 	if err != nil {
@@ -348,7 +385,7 @@ func (s *store) listNotifications(ctx context.Context, familyID, memberID string
 		var createdAt string
 		var readAt sql.NullString
 		if err := rows.Scan(&notification.ID, &notification.FamilyID, &notification.RecipientMemberID, &notification.SubjectMemberID,
-			&notification.SubjectMemberName, &notification.Type, &notification.Message, &createdAt, &readAt); err != nil {
+			&notification.SubjectMemberName, &notification.Type, &notification.Title, &notification.Message, &notification.ActionURL, &createdAt, &readAt); err != nil {
 			return nil, err
 		}
 		notification.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt)
@@ -365,6 +402,26 @@ func (s *store) listNotifications(ctx context.Context, familyID, memberID string
 		notifications = append(notifications, notification)
 	}
 	return notifications, rows.Err()
+}
+
+func (s *store) createBroadcastNotifications(ctx context.Context, familyID, title, message, actionURL string, now time.Time) (int, error) {
+	members, err := s.listMembers(ctx, familyID)
+	if err != nil {
+		return 0, err
+	}
+	incidentKey := "broadcast:" + newID()
+	created := 0
+	for _, member := range members {
+		res, err := s.db.ExecContext(ctx, `INSERT INTO notifications(id, family_id, recipient_member_id, subject_member_id, type, title, message, action_url, incident_key, created_at)
+			VALUES(?, ?, ?, ?, 'demo_broadcast', ?, ?, ?, ?, ?)`, newID(), familyID, member.ID, member.ID, title, message, actionURL, incidentKey, now.UTC().Format(time.RFC3339Nano))
+		if err != nil {
+			return created, err
+		}
+		if rows, _ := res.RowsAffected(); rows == 1 {
+			created++
+		}
+	}
+	return created, nil
 }
 
 func (s *store) markNotificationRead(ctx context.Context, familyID, memberID, notificationID string, readAt time.Time) error {
@@ -439,6 +496,37 @@ func (a *app) adminRunCoreJobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+func (a *app) adminBroadcastNotification(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		FamilyID  string `json:"familyId"`
+		Title     string `json:"title"`
+		Message   string `json:"message"`
+		ActionURL string `json:"actionUrl"`
+	}
+	if err := readJSON(r, &input); err != nil {
+		writeError(w, http.StatusBadRequest, "通知格式不正确")
+		return
+	}
+	input.FamilyID = strings.TrimSpace(input.FamilyID)
+	input.Title = strings.TrimSpace(input.Title)
+	input.Message = strings.TrimSpace(input.Message)
+	input.ActionURL = strings.TrimSpace(input.ActionURL)
+	if input.FamilyID == "" {
+		input.FamilyID = defaultFamilyID
+	}
+	parsedURL, err := url.Parse(input.ActionURL)
+	if input.Title == "" || len([]rune(input.Title)) > 120 || input.Message == "" || len([]rune(input.Message)) > 500 || err != nil || parsedURL.Scheme != "https" || parsedURL.Host == "" || parsedURL.User != nil {
+		writeError(w, http.StatusBadRequest, "通知标题、内容或 HTTPS 链接不正确")
+		return
+	}
+	created, err := a.store.createBroadcastNotifications(r.Context(), input.FamilyID, input.Title, input.Message, input.ActionURL, time.Now().UTC())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "暂时无法创建家庭通知")
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"notificationsCreated": created})
 }
 
 func (a *app) listMemberNotifications(w http.ResponseWriter, r *http.Request) {
