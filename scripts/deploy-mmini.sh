@@ -49,10 +49,15 @@ if [[ ! -f "$config_root/backend.env" ]]; then
     printf "%s\n" "APP_ENV=production"
     printf "%s\n" "ADDR=127.0.0.1:8096"
     printf "%s\n" "FAMILY_DAILY_STORAGE_DIR=$storage_root"
+    printf "%s\n" "PUBLIC_BASE_URL=https://family-api.integ.life"
     printf "%s\n" "CORS_ALLOWED_ORIGINS=https://family.integ.life,https://family-api.integ.life"
     printf "%s\n" "FAMILY_API_TOKEN=$family_token"
     printf "%s\n" "ADMIN_API_TOKEN=$admin_token"
   } > "$config_root/backend.env"
+fi
+
+if ! grep -q '^PUBLIC_BASE_URL=' "$config_root/backend.env"; then
+  printf "%s\n" "PUBLIC_BASE_URL=https://family-api.integ.life" >> "$config_root/backend.env"
 fi
 
 if [[ -f /tmp/family-daily-gemini.env ]]; then
