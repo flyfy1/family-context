@@ -14,7 +14,7 @@ Gemini 生成适龄故事和实际采用的来源 ID
         ↓
 故事文本、来源和状态先保存到本地
         ↓
-Gemini TTS 生成普通话旁白
+Gemini TTS 按故事语言生成旁白
         ↓
 WAV 音频保存到家庭本地存储并可播放
 ```
@@ -48,7 +48,8 @@ X-Family-Token: <family-token>
   "familyId": "our-family",
   "childId": "<member-id>",
   "audienceAge": 6,
-  "days": 7
+  "days": 7,
+  "language": "en"
 }
 ```
 
@@ -60,6 +61,7 @@ X-Family-Token: <family-token>
 | `childId` | 是 | 家庭成员 ID；V1 不要求单独的 `child` 角色 |
 | `audienceAge` | 否 | 3–12，默认 6，只用于本次故事的语言难度 |
 | `days` | 否 | 1–30，默认 7 |
+| `language` | 否 | `en` 或 `zh`，默认 `en`；同时控制故事文本与 TTS 语言 |
 
 后端最多把时间范围内最近 40 条家庭可见 Update 提供给 Gemini。没有家庭可见内容时返回 `409`，不会用私人内容补足故事。
 
@@ -72,8 +74,9 @@ X-Family-Token: <family-token>
   "childId": "...",
   "childName": "瓜瓜",
   "audienceAge": 6,
-  "title": "瓜瓜和窗边的小星星",
-  "content": "……",
+  "language": "en",
+  "title": "Guagua and the Starlight by the Window",
+  "content": "…",
   "sourceUpdateIds": ["update-1", "update-2"],
   "voice": "Kore",
   "audioUrl": "/api/v1/bedtime-stories/.../audio",
@@ -103,7 +106,7 @@ X-Family-Token: <family-token>
 ## 查询和播放
 
 ```http
-GET /api/v1/bedtime-stories?familyId=our-family&childId=<member-id>
+GET /api/v1/bedtime-stories?familyId=our-family&childId=<member-id>&language=en
 X-Family-Token: <family-token>
 ```
 
@@ -168,7 +171,7 @@ data/
     └── <story-id>.wav
 ```
 
-SQLite 的 `bedtime_stories` 表保存故事文本、孩子、年龄、来源 Update ID、音色、音频状态和审计信息。JSON/WAV 文件用于本地检查、备份和播放。
+SQLite 的 `bedtime_stories` 表保存故事文本、语言、孩子、年龄、来源 Update ID、音色、音频状态和审计信息。JSON/WAV 文件用于本地检查、备份和播放。升级前生成的故事会迁移为 `zh`，避免它们出现在默认英文列表。
 
 ## Later
 
@@ -176,5 +179,5 @@ SQLite 的 `bedtime_stories` 表保存故事文本、孩子、年龄、来源 Up
 - 定时生成与睡前提醒；
 - 家长编辑文本后再合成音频；
 - 细粒度家庭成员收件人权限；
-- 多人配音和多语言故事；
+- 多人配音和第三种以上语言；
 - 按孩子保存长期年龄与故事偏好。

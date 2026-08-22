@@ -140,6 +140,7 @@ type DailySummary struct {
 	FamilyID    string    `json:"familyId"`
 	Date        string    `json:"date"`
 	Content     string    `json:"content"`
+	Language    string    `json:"language"`
 	UpdateCount int       `json:"updateCount"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
@@ -150,6 +151,7 @@ type BedtimeStory struct {
 	ChildID         string    `json:"childId"`
 	ChildName       string    `json:"childName"`
 	AudienceAge     int       `json:"audienceAge"`
+	Language        string    `json:"language"`
 	Title           string    `json:"title"`
 	Content         string    `json:"content"`
 	SourceUpdateIDs []string  `json:"sourceUpdateIds"`

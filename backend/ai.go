@@ -19,7 +19,7 @@ type audioProcessor interface {
 }
 
 type dailySummarizer interface {
-	Summarize(ctx context.Context, updates []Update, members []Member) (string, error)
+	Summarize(ctx context.Context, updates []Update, members []Member, language string) (string, error)
 }
 
 type sharePolicyEvaluator interface {
@@ -59,8 +59,8 @@ func (stubAudioProcessor) Process(_ context.Context, _ []byte, _ string) (AudioR
 	}, nil
 }
 
-func (stubAudioProcessor) Summarize(_ context.Context, updates []Update, members []Member) (string, error) {
-	return localDailySummary(updates, members), nil
+func (stubAudioProcessor) Summarize(_ context.Context, updates []Update, members []Member, language string) (string, error) {
+	return localDailySummary(updates, members, language), nil
 }
 
 func (stubAudioProcessor) EvaluateShare(_ context.Context, _ string, prompt string) (ShareDecision, error) {
@@ -257,7 +257,7 @@ func (g *geminiAudioProcessor) Process(ctx context.Context, audio []byte, mimeTy
 	return AudioResult{}, fmt.Errorf("gemini interaction ended with status %q and no text output", interaction.Status)
 }
 
-func (g *geminiAudioProcessor) Summarize(ctx context.Context, updates []Update, members []Member) (string, error) {
+func (g *geminiAudioProcessor) Summarize(ctx context.Context, updates []Update, members []Member, language string) (string, error) {
 	names := make(map[string]string, len(members))
 	for _, member := range members {
 		names[member.ID] = member.Name
@@ -274,10 +274,14 @@ func (g *geminiAudioProcessor) Summarize(ctx context.Context, updates []Update, 
 	if err != nil {
 		return "", err
 	}
+	instruction := "Create a warm, concise family daily summary in English from the public family updates below. Organize it naturally by family member. Stay faithful to the source; do not add facts, advice, health judgments, or privacy inferences. Output JSON with the field summary."
+	if language == "zh" {
+		instruction = "根据下面的家庭成员公开动态生成一份简体中文家庭日报。要求：温暖、简短、忠于原文；按成员自然组织；不要添加事实、建议、健康判断或隐私推断。输出 JSON，字段 summary。"
+	}
 	payload := map[string]any{
 		"model": g.model,
 		"store": false,
-		"input": []any{map[string]any{"type": "text", "text": `根据下面的家庭成员公开动态生成一份简体中文家庭日报。要求：温暖、简短、忠于原文；按成员自然组织；不要添加事实、建议、健康判断或隐私推断。输出 JSON，字段 summary。\n\n` + string(input)}},
+		"input": []any{map[string]any{"type": "text", "text": instruction + "\n\n" + string(input)}},
 		"response_format": []any{map[string]any{
 			"type": "text", "mime_type": "application/json",
 			"schema": map[string]any{"type": "object", "properties": map[string]any{"summary": map[string]any{"type": "string"}}, "required": []string{"summary"}},
@@ -377,7 +381,7 @@ func (g *geminiAudioProcessor) EvaluateShare(ctx context.Context, text, prompt s
 	return ShareDecision{}, errors.New("gemini returned no share decision")
 }
 
-func localDailySummary(updates []Update, members []Member) string {
+func localDailySummary(updates []Update, members []Member, language string) string {
 	names := make(map[string]string, len(members))
 	for _, member := range members {
 		names[member.ID] = member.Name
@@ -391,7 +395,11 @@ func localDailySummary(updates []Update, members []Member) string {
 		if result != "" {
 			result += "\n\n"
 		}
-		result += names[update.MemberID] + "：" + text
+		separator := ": "
+		if language == "zh" {
+			separator = "："
+		}
+		result += names[update.MemberID] + separator + text
 	}
 	return result
 }

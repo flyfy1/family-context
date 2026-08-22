@@ -32,14 +32,14 @@ func TestGeminiBedtimeStoryAndTTSLive(t *testing.T) {
 	updates := []Update{{ID: "update-live", FamilyID: defaultFamilyID, MemberID: parent.ID, Type: "text", Text: "今天妈妈和小星一起在阳台给薄荷浇水，发现长出了一片新叶子。", Visibility: "family", CreatedAt: now}}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
-	draft, err := storyGenerator.GenerateBedtimeStory(ctx, child, 6, updates, []Member{child, parent})
+	draft, err := storyGenerator.GenerateBedtimeStory(ctx, child, 6, updates, []Member{child, parent}, "en")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if draft.Title == "" || draft.Content == "" || len(draft.SourceUpdateIDs) != 1 || draft.SourceUpdateIDs[0] != updates[0].ID {
 		t.Fatalf("incomplete live story: %+v", draft)
 	}
-	wav, err := tts.SynthesizeSpeech(ctx, draft.Content, bedtimeStoryVoice())
+	wav, err := tts.SynthesizeSpeech(ctx, draft.Content, bedtimeStoryVoice(), "en")
 	if err != nil {
 		t.Fatal(err)
 	}

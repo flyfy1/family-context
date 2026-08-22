@@ -62,14 +62,26 @@ func TestMemberUpdateAndDailySummaryLoop(t *testing.T) {
 	summary := requestJSON[DailySummary](t, server.Client(), http.MethodPost, server.URL+"/api/v1/daily-summaries/generate", map[string]string{
 		"familyId": defaultFamilyID, "date": today,
 	}, http.StatusCreated)
-	if summary.UpdateCount != 1 || summary.Content == "" {
+	if summary.UpdateCount != 1 || summary.Content == "" || summary.Language != "en" {
 		t.Fatalf("unexpected daily summary: %+v", summary)
+	}
+	chineseSummary := requestJSON[DailySummary](t, server.Client(), http.MethodPost, server.URL+"/api/v1/daily-summaries/generate", map[string]string{
+		"familyId": defaultFamilyID, "date": today, "language": "zh",
+	}, http.StatusCreated)
+	if chineseSummary.Language != "zh" || chineseSummary.ID == summary.ID {
+		t.Fatalf("unexpected Chinese daily summary: %+v", chineseSummary)
 	}
 	latest := requestJSON[struct {
 		Summary *DailySummary `json:"summary"`
 	}](t, server.Client(), http.MethodGet, server.URL+"/api/v1/daily-summaries/latest", nil, http.StatusOK)
 	if latest.Summary == nil || latest.Summary.ID != summary.ID {
 		t.Fatalf("unexpected latest summary: %+v", latest)
+	}
+	latestChinese := requestJSON[struct {
+		Summary *DailySummary `json:"summary"`
+	}](t, server.Client(), http.MethodGet, server.URL+"/api/v1/daily-summaries/latest?language=zh", nil, http.StatusOK)
+	if latestChinese.Summary == nil || latestChinese.Summary.ID != chineseSummary.ID {
+		t.Fatalf("unexpected latest Chinese summary: %+v", latestChinese)
 	}
 }
 

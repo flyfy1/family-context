@@ -17,14 +17,14 @@ func (s *store) createBedtimeStory(ctx context.Context, story BedtimeStory) erro
 		return err
 	}
 	defer tx.Rollback()
-	_, err = tx.ExecContext(ctx, `INSERT INTO bedtime_stories(id, family_id, child_id, child_name, audience_age, title, content, source_update_ids_json, voice, audio_file, status, error_message, created_at, updated_at)
-		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?)`, story.ID, story.FamilyID, story.ChildID, story.ChildName, story.AudienceAge,
+	_, err = tx.ExecContext(ctx, `INSERT INTO bedtime_stories(id, family_id, child_id, child_name, audience_age, language, title, content, source_update_ids_json, voice, audio_file, status, error_message, created_at, updated_at)
+		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?)`, story.ID, story.FamilyID, story.ChildID, story.ChildName, story.AudienceAge, story.Language,
 		story.Title, story.Content, string(sources), story.Voice, story.Status, story.ErrorMessage, story.CreatedAt.Format(time.RFC3339Nano), story.UpdatedAt.Format(time.RFC3339Nano))
 	if err != nil {
 		return err
 	}
 	if err := appendAudit(ctx, tx, "bedtime_story.created", "bedtime_story", story.ID, map[string]any{
-		"childId": story.ChildID, "sourceUpdateIds": story.SourceUpdateIDs, "status": story.Status,
+		"childId": story.ChildID, "language": story.Language, "sourceUpdateIds": story.SourceUpdateIDs, "status": story.Status,
 	}, story.CreatedAt); err != nil {
 		return err
 	}
@@ -55,9 +55,9 @@ func (s *store) getBedtimeStory(ctx context.Context, id, familyID string) (Bedti
 	return scanBedtimeStory(s.db.QueryRowContext(ctx, bedtimeStorySelect+` WHERE id = ? AND family_id = ?`, id, familyID))
 }
 
-func (s *store) listBedtimeStories(ctx context.Context, familyID, childID string) ([]BedtimeStory, error) {
-	query := bedtimeStorySelect + ` WHERE family_id = ?`
-	args := []any{familyID}
+func (s *store) listBedtimeStories(ctx context.Context, familyID, childID, language string) ([]BedtimeStory, error) {
+	query := bedtimeStorySelect + ` WHERE family_id = ? AND language = ?`
+	args := []any{familyID, language}
 	if childID != "" {
 		query += ` AND child_id = ?`
 		args = append(args, childID)
@@ -79,12 +79,12 @@ func (s *store) listBedtimeStories(ctx context.Context, familyID, childID string
 	return stories, rows.Err()
 }
 
-const bedtimeStorySelect = `SELECT id, family_id, child_id, child_name, audience_age, title, content, source_update_ids_json, voice, audio_file, status, error_message, created_at, updated_at FROM bedtime_stories`
+const bedtimeStorySelect = `SELECT id, family_id, child_id, child_name, audience_age, language, title, content, source_update_ids_json, voice, audio_file, status, error_message, created_at, updated_at FROM bedtime_stories`
 
 func scanBedtimeStory(row rowScanner) (BedtimeStory, error) {
 	var story BedtimeStory
 	var sourcesJSON, audioFile, createdAt, updatedAt string
-	if err := row.Scan(&story.ID, &story.FamilyID, &story.ChildID, &story.ChildName, &story.AudienceAge, &story.Title, &story.Content,
+	if err := row.Scan(&story.ID, &story.FamilyID, &story.ChildID, &story.ChildName, &story.AudienceAge, &story.Language, &story.Title, &story.Content,
 		&sourcesJSON, &story.Voice, &audioFile, &story.Status, &story.ErrorMessage, &createdAt, &updatedAt); err != nil {
 		return BedtimeStory{}, err
 	}

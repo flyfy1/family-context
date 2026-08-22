@@ -18,6 +18,7 @@ func (a *app) createBedtimeStory(w http.ResponseWriter, r *http.Request) {
 		ChildID     string `json:"childId"`
 		AudienceAge int    `json:"audienceAge"`
 		Days        int    `json:"days"`
+		Language    string `json:"language"`
 	}
 	if err := readJSON(r, &input); err != nil {
 		writeError(w, http.StatusBadRequest, "睡前故事请求格式不正确")
@@ -33,6 +34,11 @@ func (a *app) createBedtimeStory(w http.ResponseWriter, r *http.Request) {
 	}
 	if input.Days == 0 {
 		input.Days = 7
+	}
+	language, ok := normalizeLanguage(input.Language)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "language must be en or zh")
+		return
 	}
 	if input.ChildID == "" || input.AudienceAge < 3 || input.AudienceAge > 12 || input.Days < 1 || input.Days > 30 {
 		writeError(w, http.StatusBadRequest, "请选择孩子；年龄须为 3 到 12 岁，时间范围须为 1 到 30 天")
@@ -61,7 +67,7 @@ func (a *app) createBedtimeStory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "暂时无法读取家庭成员")
 		return
 	}
-	draft, err := a.storyAI.GenerateBedtimeStory(r.Context(), child, input.AudienceAge, updates, members)
+	draft, err := a.storyAI.GenerateBedtimeStory(r.Context(), child, input.AudienceAge, updates, members, language)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "AI 暂时无法生成睡前故事")
 		return
@@ -94,7 +100,7 @@ func (a *app) createBedtimeStory(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now().UTC()
 	story := BedtimeStory{ID: newID(), FamilyID: input.FamilyID, ChildID: child.ID, ChildName: child.Name, AudienceAge: input.AudienceAge,
-		Title: draft.Title, Content: draft.Content, SourceUpdateIDs: sources, Voice: bedtimeStoryVoice(), Status: "text_ready", CreatedAt: now, UpdatedAt: now}
+		Language: language, Title: draft.Title, Content: draft.Content, SourceUpdateIDs: sources, Voice: bedtimeStoryVoice(), Status: "text_ready", CreatedAt: now, UpdatedAt: now}
 	if err := a.store.createBedtimeStory(r.Context(), story); err != nil {
 		writeError(w, http.StatusInternalServerError, "暂时无法保存睡前故事")
 		return
@@ -112,7 +118,7 @@ func (a *app) createBedtimeStory(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) synthesizeBedtimeStoryAudio(r *http.Request, story BedtimeStory) (BedtimeStory, error) {
-	wav, synthErr := a.tts.SynthesizeSpeech(r.Context(), story.Content, story.Voice)
+	wav, synthErr := a.tts.SynthesizeSpeech(r.Context(), story.Content, story.Voice, story.Language)
 	story.UpdatedAt = time.Now().UTC()
 	audioFile := ""
 	if synthErr != nil {
@@ -180,7 +186,12 @@ func (a *app) listBedtimeStories(w http.ResponseWriter, r *http.Request) {
 	if familyID == "" {
 		familyID = defaultFamilyID
 	}
-	stories, err := a.store.listBedtimeStories(r.Context(), familyID, strings.TrimSpace(r.URL.Query().Get("childId")))
+	language, ok := normalizeLanguage(r.URL.Query().Get("language"))
+	if !ok {
+		writeError(w, http.StatusBadRequest, "language must be en or zh")
+		return
+	}
+	stories, err := a.store.listBedtimeStories(r.Context(), familyID, strings.TrimSpace(r.URL.Query().Get("childId")), language)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "暂时无法读取睡前故事")
 		return

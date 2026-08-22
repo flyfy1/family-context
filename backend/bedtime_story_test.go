@@ -14,12 +14,14 @@ import (
 
 type recordingBedtimeProcessor struct {
 	stubAudioProcessor
-	seen     []Update
-	synthErr error
+	seen      []Update
+	languages []string
+	synthErr  error
 }
 
-func (p *recordingBedtimeProcessor) GenerateBedtimeStory(_ context.Context, child Member, _ int, updates []Update, _ []Member) (BedtimeStoryDraft, error) {
+func (p *recordingBedtimeProcessor) GenerateBedtimeStory(_ context.Context, child Member, _ int, updates []Update, _ []Member, language string) (BedtimeStoryDraft, error) {
 	p.seen = append([]Update(nil), updates...)
+	p.languages = append(p.languages, "story:"+language)
 	sources := make([]string, 0, len(updates))
 	for _, update := range updates {
 		sources = append(sources, update.ID)
@@ -27,7 +29,8 @@ func (p *recordingBedtimeProcessor) GenerateBedtimeStory(_ context.Context, chil
 	return BedtimeStoryDraft{Title: child.Name + "的月光晚安", Content: "月光轻轻照进窗户，把家人今天分享的快乐变成了一颗温暖的小星星。晚安。", SourceUpdateIDs: sources}, nil
 }
 
-func (p *recordingBedtimeProcessor) SynthesizeSpeech(_ context.Context, _ string, _ string) ([]byte, error) {
+func (p *recordingBedtimeProcessor) SynthesizeSpeech(_ context.Context, _ string, _ string, language string) ([]byte, error) {
+	p.languages = append(p.languages, "tts:"+language)
 	if p.synthErr != nil {
 		return nil, p.synthErr
 	}
@@ -64,13 +67,16 @@ func TestBedtimeStoryUsesOnlySharedContextAndPersistsAudio(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	story := requestJSON[BedtimeStory](t, server.Client(), http.MethodPost, server.URL+"/api/v1/bedtime-stories", map[string]any{
-		"familyId": defaultFamilyID, "childId": child.ID, "audienceAge": 6, "days": 7,
+		"familyId": defaultFamilyID, "childId": child.ID, "audienceAge": 6, "days": 7, "language": "zh",
 	}, http.StatusCreated)
 	if story.Status != "ready" || story.AudioURL == "" || len(story.SourceUpdateIDs) != 1 || story.SourceUpdateIDs[0] != shared.ID {
 		t.Fatalf("unexpected bedtime story: %+v", story)
 	}
 	if len(processor.seen) != 1 || processor.seen[0].ID != shared.ID {
 		t.Fatalf("private context reached generator: %+v", processor.seen)
+	}
+	if story.Language != "zh" || len(processor.languages) != 2 || processor.languages[0] != "story:zh" || processor.languages[1] != "tts:zh" {
+		t.Fatalf("language was not propagated: story=%+v calls=%v", story, processor.languages)
 	}
 	metadataPath := filepath.Join(temp, "spaces", "shared", "stories", story.ID+".json")
 	if _, err := os.Stat(metadataPath); err != nil {
@@ -117,6 +123,9 @@ func TestBedtimeStoryKeepsTextWhenTTSFails(t *testing.T) {
 	server := httptest.NewServer(application.routes())
 	t.Cleanup(server.Close)
 	story := requestJSON[BedtimeStory](t, server.Client(), http.MethodPost, server.URL+"/api/v1/bedtime-stories", map[string]any{"childId": child.ID}, http.StatusCreated)
+	if story.Language != "en" {
+		t.Fatalf("default language = %q, want en", story.Language)
+	}
 	if story.Status != "audio_failed" || story.Content == "" || story.AudioURL != "" || story.ErrorMessage == "" {
 		t.Fatalf("story text was not retained: %+v", story)
 	}

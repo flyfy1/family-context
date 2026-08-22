@@ -137,8 +137,8 @@ func (s *store) createDailySummary(ctx context.Context, summary DailySummary) er
 		return err
 	}
 	defer tx.Rollback()
-	_, err = tx.ExecContext(ctx, `INSERT INTO daily_summaries(id, family_id, summary_date, content, update_count, created_at) VALUES(?, ?, ?, ?, ?, ?)`,
-		summary.ID, summary.FamilyID, summary.Date, summary.Content, summary.UpdateCount, summary.CreatedAt.Format(time.RFC3339Nano))
+	_, err = tx.ExecContext(ctx, `INSERT INTO daily_summaries(id, family_id, summary_date, content, language, update_count, created_at) VALUES(?, ?, ?, ?, ?, ?, ?)`,
+		summary.ID, summary.FamilyID, summary.Date, summary.Content, summary.Language, summary.UpdateCount, summary.CreatedAt.Format(time.RFC3339Nano))
 	if err != nil {
 		return err
 	}
@@ -148,11 +148,11 @@ func (s *store) createDailySummary(ctx context.Context, summary DailySummary) er
 	return tx.Commit()
 }
 
-func (s *store) latestDailySummary(ctx context.Context, familyID string) (DailySummary, error) {
+func (s *store) latestDailySummary(ctx context.Context, familyID, language string) (DailySummary, error) {
 	var summary DailySummary
 	var createdAt string
-	err := s.db.QueryRowContext(ctx, `SELECT id, family_id, summary_date, content, update_count, created_at FROM daily_summaries WHERE family_id = ? ORDER BY summary_date DESC, created_at DESC LIMIT 1`, familyID).
-		Scan(&summary.ID, &summary.FamilyID, &summary.Date, &summary.Content, &summary.UpdateCount, &createdAt)
+	err := s.db.QueryRowContext(ctx, `SELECT id, family_id, summary_date, content, language, update_count, created_at FROM daily_summaries WHERE family_id = ? AND language = ? ORDER BY summary_date DESC, created_at DESC LIMIT 1`, familyID, language).
+		Scan(&summary.ID, &summary.FamilyID, &summary.Date, &summary.Content, &summary.Language, &summary.UpdateCount, &createdAt)
 	if err != nil {
 		return DailySummary{}, err
 	}

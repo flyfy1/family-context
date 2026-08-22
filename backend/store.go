@@ -125,6 +125,7 @@ CREATE TABLE IF NOT EXISTS daily_summaries (
   family_id TEXT NOT NULL,
   summary_date TEXT NOT NULL,
   content TEXT NOT NULL,
+  language TEXT NOT NULL DEFAULT 'en',
   update_count INTEGER NOT NULL,
   created_at TEXT NOT NULL
 );
@@ -169,6 +170,7 @@ CREATE TABLE IF NOT EXISTS bedtime_stories (
   child_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
   child_name TEXT NOT NULL,
   audience_age INTEGER NOT NULL,
+  language TEXT NOT NULL DEFAULT 'en',
   title TEXT NOT NULL,
   content TEXT NOT NULL,
   source_update_ids_json TEXT NOT NULL,
@@ -202,8 +204,36 @@ CREATE INDEX IF NOT EXISTS idx_bedtime_stories_child_created ON bedtime_stories(
 	}
 	if hasAdminColumn == 0 {
 		_, err = s.db.ExecContext(ctx, `ALTER TABLE members ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0`)
+		if err != nil {
+			return err
+		}
 	}
-	return err
+	for _, table := range []string{"daily_summaries", "bedtime_stories"} {
+		added, err := ensureLanguageColumn(ctx, s.db, table)
+		if err != nil { return err }
+		if added {
+			if _, err := s.db.ExecContext(ctx, `UPDATE `+table+` SET language = 'zh'`); err != nil { return err }
+		}
+	}
+	return nil
+}
+
+func ensureLanguageColumn(ctx context.Context, db *sql.DB, table string) (bool, error) {
+	rows, err := db.QueryContext(ctx, `PRAGMA table_info(`+table+`)`)
+	if err != nil { return false, err }
+	found := false
+	for rows.Next() {
+		var cid int
+		var name, columnType string
+		var notNull, primaryKey int
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil { rows.Close(); return false, err }
+		if name == "language" { found = true }
+	}
+	if err := rows.Close(); err != nil { return false, err }
+	if found { return false, nil }
+	_, err = db.ExecContext(ctx, `ALTER TABLE `+table+` ADD COLUMN language TEXT NOT NULL DEFAULT 'en'`)
+	return err == nil, err
 }
 
 func (s *store) createQuestion(ctx context.Context, q Question) error {

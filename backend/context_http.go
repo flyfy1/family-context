@@ -284,7 +284,12 @@ func (a *app) latestDailySummary(w http.ResponseWriter, r *http.Request) {
 	if familyID == "" {
 		familyID = defaultFamilyID
 	}
-	summary, err := a.store.latestDailySummary(r.Context(), familyID)
+	language, ok := normalizeLanguage(r.URL.Query().Get("language"))
+	if !ok {
+		writeError(w, http.StatusBadRequest, "language must be en or zh")
+		return
+	}
+	summary, err := a.store.latestDailySummary(r.Context(), familyID, language)
 	if errors.Is(err, sql.ErrNoRows) {
 		writeJSON(w, http.StatusOK, map[string]any{"summary": nil})
 		return
@@ -300,6 +305,7 @@ func (a *app) generateDailySummary(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		FamilyID string `json:"familyId"`
 		Date     string `json:"date"`
+		Language string `json:"language"`
 	}
 	if err := readJSON(r, &input); err != nil {
 		writeError(w, http.StatusBadRequest, "日报请求格式不正确")
@@ -307,6 +313,11 @@ func (a *app) generateDailySummary(w http.ResponseWriter, r *http.Request) {
 	}
 	if input.FamilyID == "" {
 		input.FamilyID = defaultFamilyID
+	}
+	language, ok := normalizeLanguage(input.Language)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "language must be en or zh")
+		return
 	}
 	if _, err := time.Parse("2006-01-02", input.Date); err != nil {
 		writeError(w, http.StatusBadRequest, "日报日期格式不正确")
@@ -326,12 +337,12 @@ func (a *app) generateDailySummary(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "暂时无法读取家庭成员")
 		return
 	}
-	content, err := a.summarizer.Summarize(r.Context(), updates, members)
+	content, err := a.summarizer.Summarize(r.Context(), updates, members, language)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "AI 暂时无法生成家庭日报")
 		return
 	}
-	summary := DailySummary{ID: newID(), FamilyID: input.FamilyID, Date: input.Date, Content: content, UpdateCount: len(updates), CreatedAt: time.Now().UTC()}
+	summary := DailySummary{ID: newID(), FamilyID: input.FamilyID, Date: input.Date, Content: content, Language: language, UpdateCount: len(updates), CreatedAt: time.Now().UTC()}
 	if err := persistSummaryToSpace(a.spacesRoot, summary); err != nil {
 		writeError(w, http.StatusInternalServerError, "暂时无法写入家庭日报文件")
 		return

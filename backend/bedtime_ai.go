@@ -14,26 +14,29 @@ import (
 )
 
 type bedtimeStoryGenerator interface {
-	GenerateBedtimeStory(ctx context.Context, child Member, audienceAge int, updates []Update, members []Member) (BedtimeStoryDraft, error)
+	GenerateBedtimeStory(ctx context.Context, child Member, audienceAge int, updates []Update, members []Member, language string) (BedtimeStoryDraft, error)
 }
 
 type speechSynthesizer interface {
-	SynthesizeSpeech(ctx context.Context, text, voice string) ([]byte, error)
+	SynthesizeSpeech(ctx context.Context, text, voice, language string) ([]byte, error)
 }
 
-func (stubAudioProcessor) GenerateBedtimeStory(_ context.Context, child Member, _ int, updates []Update, _ []Member) (BedtimeStoryDraft, error) {
+func (stubAudioProcessor) GenerateBedtimeStory(_ context.Context, child Member, _ int, updates []Update, _ []Member, language string) (BedtimeStoryDraft, error) {
 	sources := make([]string, 0, len(updates))
 	for _, update := range updates {
 		sources = append(sources, update.ID)
 	}
-	return BedtimeStoryDraft{Title: child.Name + "和家里的星光", Content: "夜晚到了，家里今天发生的温暖小事变成了窗边的星光。大家互相惦记，也把快乐带回了家。晚安，明天又会是新的一天。", SourceUpdateIDs: sources}, nil
+	if language == "zh" {
+		return BedtimeStoryDraft{Title: child.Name + "和家里的星光", Content: "夜晚到了，家里今天发生的温暖小事变成了窗边的星光。大家互相惦记，也把快乐带回了家。晚安，明天又会是新的一天。", SourceUpdateIDs: sources}, nil
+	}
+	return BedtimeStoryDraft{Title: child.Name + " and the Family Starlight", Content: "Night arrived, and the family's warm moments became little stars by the window. Everyone carried that kindness home. Good night; tomorrow will bring another gentle day.", SourceUpdateIDs: sources}, nil
 }
 
-func (stubAudioProcessor) SynthesizeSpeech(_ context.Context, _ string, _ string) ([]byte, error) {
+func (stubAudioProcessor) SynthesizeSpeech(_ context.Context, _ string, _ string, _ string) ([]byte, error) {
 	return wrapPCMAsWAV([]byte{0, 0, 0, 0, 0, 0, 0, 0}, 24000, 1, 16), nil
 }
 
-func (g *geminiAudioProcessor) GenerateBedtimeStory(ctx context.Context, child Member, audienceAge int, updates []Update, members []Member) (BedtimeStoryDraft, error) {
+func (g *geminiAudioProcessor) GenerateBedtimeStory(ctx context.Context, child Member, audienceAge int, updates []Update, members []Member, language string) (BedtimeStoryDraft, error) {
 	names := make(map[string]string, len(members))
 	for _, member := range members {
 		names[member.ID] = member.Name
@@ -50,7 +53,21 @@ func (g *geminiAudioProcessor) GenerateBedtimeStory(ctx context.Context, child M
 	if err != nil {
 		return BedtimeStoryDraft{}, err
 	}
-	prompt := fmt.Sprintf(`你是一位谨慎、温柔的家庭睡前故事作者。请根据下面仅包含家庭可见动态的 JSON，为 %s（约 %d 岁）写一篇 2 到 4 分钟的简体中文睡前故事。
+	prompt := fmt.Sprintf(`You are a careful, gentle family bedtime-story writer. Using only the family-visible updates in the JSON below, write a 2-to-4-minute English bedtime story for %s, approximately age %d.
+
+Requirements:
+- Use only facts explicitly present in the input. Do not invent travel, dialogue, health outcomes, relationships, or other events.
+- Gentle imaginative bridges such as moonlight, stars, or animals are allowed, but never present them as real family events.
+- Keep the language warm, calm, and age-appropriate. Do not create danger, shame, comparison, anxiety, or medical advice.
+- Do not mention product terms such as updates, data, or AI.
+- You may omit details unsuitable for bedtime, but never use private content.
+- sourceUpdateIds must contain only input IDs actually used in the story, at least one, with no invented IDs.
+- Output JSON with title, content, and sourceUpdateIds.
+
+Family-visible context:
+%s`, child.Name, audienceAge, string(contextJSON))
+	if language == "zh" {
+		prompt = fmt.Sprintf(`你是一位谨慎、温柔的家庭睡前故事作者。请根据下面仅包含家庭可见动态的 JSON，为 %s（约 %d 岁）写一篇 2 到 4 分钟的简体中文睡前故事。
 
 要求：
 - 只使用输入中明确存在的事实，不添加旅行、对话、健康结果、人物关系或其他事件。
@@ -63,6 +80,7 @@ func (g *geminiAudioProcessor) GenerateBedtimeStory(ctx context.Context, child M
 
 家庭可见内容：
 %s`, child.Name, audienceAge, string(contextJSON))
+	}
 	payload := map[string]any{
 		"model": g.model, "store": false, "input": []any{map[string]any{"type": "text", "text": prompt}},
 		"response_format": []any{map[string]any{"type": "text", "mime_type": "application/json", "schema": map[string]any{
@@ -112,14 +130,18 @@ func (g *geminiAudioProcessor) GenerateBedtimeStory(ctx context.Context, child M
 	return BedtimeStoryDraft{}, errors.New("gemini returned no bedtime story")
 }
 
-func (g *geminiAudioProcessor) SynthesizeSpeech(ctx context.Context, text, voice string) ([]byte, error) {
+func (g *geminiAudioProcessor) SynthesizeSpeech(ctx context.Context, text, voice, language string) ([]byte, error) {
 	model := envOr("GEMINI_TTS_MODEL", "gemini-3.1-flash-tts-preview")
 	if strings.TrimSpace(voice) == "" {
 		voice = envOr("GEMINI_TTS_VOICE", "Kore")
 	}
+	instruction := "Read the following text exactly as written in warm, calm, natural English with the pacing of a bedtime story. Do not add or remove any content.\n\n"
+	if language == "zh" {
+		instruction = "请用温暖、舒缓、自然的普通话，以睡前讲故事的节奏朗读下面全文。不要增加或删改任何内容。\n\n"
+	}
 	payload := map[string]any{
 		"model": model, "store": false,
-		"input":             "请用温暖、舒缓、自然的普通话，以睡前讲故事的节奏朗读下面全文。不要增加或删改任何内容。\n\n" + text,
+		"input":             instruction + text,
 		"response_format":   map[string]any{"type": "audio"},
 		"generation_config": map[string]any{"speech_config": []any{map[string]any{"voice": voice}}},
 	}
