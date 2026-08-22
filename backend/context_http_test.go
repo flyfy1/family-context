@@ -142,8 +142,11 @@ func TestImageUpdateIsStoredAndReadableFromWebFlow(t *testing.T) {
 	server := httptest.NewServer(newApp(store, stubAudioProcessor{}, filepath.Join(temp, "media"), "test-token").routes())
 	t.Cleanup(server.Close)
 	member := requestJSON[Member](t, server.Client(), http.MethodPost, server.URL+"/api/v1/members", map[string]string{
-		"familyId": defaultFamilyID, "name": "孩子", "role": "member", "color": "#B47A3C",
+		"familyId": defaultFamilyID, "name": "孩子", "role": "child", "color": "#B47A3C",
 	}, http.StatusCreated)
+	if member.Role != "child" {
+		t.Fatalf("child role was not preserved: %+v", member)
+	}
 
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)

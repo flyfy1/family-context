@@ -181,7 +181,7 @@ Current values used by the code:
 
 - `questions.status`: `pending`, `answered`
 - `answers.status`: `processing`, `ready`, `processing_failed`, `shared`
-- `members.role`: `member`, `elder`
+- `members.role`: `member`, `elder`, `child`
 - `updates.type`: currently `text`, `voice`
 - `updates.visibility`: `private`, `family`
 - `updates.source`: currently `member`, `member_voice`, `member_voice_processing_failed`, `member_thought`

@@ -17,6 +17,10 @@ const defaultFamilyID = "our-family"
 
 var hexColorPattern = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
+func validMemberRole(role string) bool {
+	return role == "member" || role == "elder" || role == "child"
+}
+
 func (a *app) listMembers(w http.ResponseWriter, r *http.Request) {
 	familyID := strings.TrimSpace(r.URL.Query().Get("familyId"))
 	if familyID == "" {
@@ -52,8 +56,8 @@ func (a *app) createMember(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "成员称呼不能为空且不能超过 30 个字")
 		return
 	}
-	if input.Role != "member" && input.Role != "elder" {
-		writeError(w, http.StatusBadRequest, "成员角色只能是普通成员或老人")
+	if !validMemberRole(input.Role) {
+		writeError(w, http.StatusBadRequest, "成员角色只能是普通成员、老人或孩子")
 		return
 	}
 	if !hexColorPattern.MatchString(input.Color) {

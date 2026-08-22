@@ -41,7 +41,7 @@ func (a *app) adminCreateMember(w http.ResponseWriter, r *http.Request) {
 	if input.FamilyID == "" {
 		input.FamilyID = defaultFamilyID
 	}
-	if input.Name == "" || len([]rune(input.Name)) > 30 || (input.Role != "member" && input.Role != "elder") {
+	if input.Name == "" || len([]rune(input.Name)) > 30 || !validMemberRole(input.Role) {
 		writeError(w, http.StatusBadRequest, "成员称呼或角色不正确")
 		return
 	}
@@ -85,7 +85,7 @@ func (a *app) adminUpdateMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	input.Name = strings.TrimSpace(input.Name)
-	if input.Name == "" || len([]rune(input.Name)) > 30 || (input.Role != "member" && input.Role != "elder") || !hexColorPattern.MatchString(input.Color) {
+	if input.Name == "" || len([]rune(input.Name)) > 30 || !validMemberRole(input.Role) || !hexColorPattern.MatchString(input.Color) {
 		writeError(w, http.StatusBadRequest, "成员称呼、角色或颜色不正确")
 		return
 	}

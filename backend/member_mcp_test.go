@@ -34,8 +34,11 @@ func TestAdminMemberImagePolicyAndMCPLoop(t *testing.T) {
 	}
 
 	credential := requestAdminJSON[MemberCredential](t, server.Client(), http.MethodPost, server.URL+"/api/v1/admin/members", map[string]string{
-		"familyId": defaultFamilyID, "name": "妈妈", "role": "elder", "color": "#54706A",
+		"familyId": defaultFamilyID, "name": "瓜瓜", "role": "child", "color": "#54706A",
 	}, http.StatusCreated)
+	if credential.Member.Role != "child" {
+		t.Fatalf("admin child role was not preserved: %+v", credential.Member)
+	}
 	if !strings.HasPrefix(credential.AccessToken, "fdm_") {
 		t.Fatalf("unexpected member access token")
 	}
