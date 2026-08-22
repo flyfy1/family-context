@@ -1,6 +1,8 @@
 package main
 
 import (
+	"database/sql"
+	"errors"
 	"io"
 	"mime"
 	"net/http"
@@ -13,6 +15,20 @@ const maxImageBytes = 25 << 20
 
 func (a *app) getMe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, memberFromContext(r.Context()))
+}
+
+func (a *app) memberDismissAttention(w http.ResponseWriter, r *http.Request) {
+	actor := memberFromContext(r.Context())
+	err := a.store.dismissMemberAttention(r.Context(), actor.FamilyID, r.PathValue("id"), actor.ID, time.Now().UTC())
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "没有找到需要关注的老人")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "暂时无法取消关注状态")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (a *app) memberListUpdates(w http.ResponseWriter, r *http.Request) {

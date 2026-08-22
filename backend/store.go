@@ -230,6 +230,9 @@ CREATE INDEX IF NOT EXISTS idx_bedtime_stories_child_created ON bedtime_stories(
 			return err
 		}
 	}
+	if _, err := s.db.ExecContext(ctx, `UPDATE members SET needs_attention = 0 WHERE role != 'elder' AND needs_attention != 0`); err != nil {
+		return err
+	}
 	for _, table := range []string{"daily_summaries", "bedtime_stories"} {
 		added, err := ensureLanguageColumn(ctx, s.db, table)
 		if err != nil {

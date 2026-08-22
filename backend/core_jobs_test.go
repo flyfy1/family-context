@@ -233,30 +233,34 @@ func TestAdminBroadcastNotificationCreatesMemberScopedHTTPSActions(t *testing.T)
 	t.Cleanup(func() { store.Close() })
 	now := time.Now().UTC()
 	for _, member := range []Member{
-		{ID: "first", FamilyID: defaultFamilyID, Name: "爸爸", Role: "member", CreatedAt: now},
+		{ID: "first", FamilyID: defaultFamilyID, Name: "外婆", Role: "elder", CreatedAt: now},
 		{ID: "second", FamilyID: defaultFamilyID, Name: "妈妈", Role: "member", CreatedAt: now},
 	} {
 		if err := store.createMember(context.Background(), member); err != nil {
 			t.Fatal(err)
 		}
 	}
+	memberToken := "member-token"
+	if err := store.setMemberTokenHash(context.Background(), "second", hashToken(memberToken), now); err != nil {
+		t.Fatal(err)
+	}
 	server := httptest.NewServer(newApp(store, stubAudioProcessor{}, filepath.Join(temp, "media"), "admin-token").routes())
 	t.Cleanup(server.Close)
 
 	requestScopedJSON[map[string]any](t, server.Client(), http.MethodPost, server.URL+"/api/v1/admin/notifications/broadcast",
-		map[string]any{"title": "想念你了", "message": "家里好久没有新动态，点这里看看。", "actionUrl": "http://family.integ.life"},
+		map[string]any{"title": "想念你了", "titleEn": "We miss you", "message": "家里好久没有新动态，点这里看看。", "messageEn": "There have not been new family updates for a while. Tap to check in.", "actionUrl": "http://family.integ.life"},
 		"X-Admin-Token", "admin-token", http.StatusBadRequest)
 	result := requestScopedJSON[struct {
 		NotificationsCreated      int `json:"notificationsCreated"`
 		MembersMarkedForAttention int `json:"membersMarkedForAttention"`
 	}](t, server.Client(), http.MethodPost, server.URL+"/api/v1/admin/notifications/broadcast",
-		map[string]any{"title": "想念你了", "message": "家里好久没有新动态，点这里看看。", "actionUrl": "https://family.integ.life/#/feed", "markNeedsAttention": true},
+		map[string]any{"title": "想念你了", "titleEn": "We miss you", "message": "家里好久没有新动态，点这里看看。", "messageEn": "There have not been new family updates for a while. Tap to check in.", "actionUrl": "https://family.integ.life/#/feed", "markNeedsAttention": true},
 		"X-Admin-Token", "admin-token", http.StatusCreated)
-	if result.NotificationsCreated != 2 || result.MembersMarkedForAttention != 2 {
+	if result.NotificationsCreated != 2 || result.MembersMarkedForAttention != 1 {
 		t.Fatalf("broadcast result=%+v", result)
 	}
 	members, err := store.listMembers(context.Background(), defaultFamilyID)
-	if err != nil || len(members) != 2 || !members[0].NeedsAttention || !members[1].NeedsAttention {
+	if err != nil || len(members) != 2 || !members[0].NeedsAttention || members[1].NeedsAttention {
 		t.Fatalf("attention members=%+v err=%v", members, err)
 	}
 	for _, memberID := range []string{"first", "second"} {
@@ -265,8 +269,14 @@ func TestAdminBroadcastNotificationCreatesMemberScopedHTTPSActions(t *testing.T)
 			t.Fatalf("member %s notifications=%+v err=%v", memberID, notifications, err)
 		}
 		got := notifications[0]
-		if got.Title != "想念你了" || got.Message != "家里好久没有新动态，点这里看看。" || got.ActionURL != "https://family.integ.life/#/feed" {
+		if got.Title != "想念你了" || got.TitleEN != "We miss you" || got.Message != "家里好久没有新动态，点这里看看。" || got.MessageEN != "There have not been new family updates for a while. Tap to check in." || got.ActionURL != "https://family.integ.life/#/feed" {
 			t.Fatalf("member %s notification=%+v", memberID, got)
 		}
+	}
+	requestScopedJSON[map[string]any](t, server.Client(), http.MethodPost, server.URL+"/api/v1/me/members/first/attention/dismiss",
+		nil, "Authorization", "Bearer "+memberToken, http.StatusNoContent)
+	members, err = store.listMembers(context.Background(), defaultFamilyID)
+	if err != nil || members[0].NeedsAttention {
+		t.Fatalf("attention was not dismissed: members=%+v err=%v", members, err)
 	}
 }

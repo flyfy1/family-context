@@ -128,6 +128,7 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/me/updates", a.memberAuthorized(a.memberListUpdates))
 	mux.HandleFunc("GET /api/v1/me/notifications", a.memberAuthorized(a.memberListNotifications))
 	mux.HandleFunc("POST /api/v1/me/notifications/{id}/read", a.memberAuthorized(a.memberReadNotification))
+	mux.HandleFunc("POST /api/v1/me/members/{id}/attention/dismiss", a.memberAuthorized(a.memberDismissAttention))
 	mux.HandleFunc("GET /api/v1/me/activity-threads", a.memberAuthorized(a.memberListActivityThreads))
 	mux.HandleFunc("POST /api/v1/me/activity-threads", a.memberAuthorized(a.memberCreateActivityThread))
 	mux.HandleFunc("POST /api/v1/me/activity-threads/{id}/posts", a.memberAuthorized(a.memberCreateActivityTextPost))

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"time"
 )
 
@@ -48,6 +49,28 @@ func (s *store) memberExists(ctx context.Context, id, familyID string) (bool, er
 	var count int
 	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM members WHERE id = ? AND family_id = ?`, id, familyID).Scan(&count)
 	return count == 1, err
+}
+
+func (s *store) dismissMemberAttention(ctx context.Context, familyID, memberID, actorMemberID string, changedAt time.Time) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `UPDATE members SET needs_attention = 0
+		WHERE id = ? AND family_id = ? AND role = 'elder' AND needs_attention = 1`, memberID, familyID)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return sql.ErrNoRows
+	}
+	if err := appendAudit(ctx, tx, "member.attention_changed", "member", memberID, map[string]any{
+		"needsAttention": false, "source": "family_acknowledgement", "actorMemberId": actorMemberID,
+	}, changedAt); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *store) memberCanReadMedia(ctx context.Context, viewerMemberID, ownerMemberID, fileName string) (bool, error) {

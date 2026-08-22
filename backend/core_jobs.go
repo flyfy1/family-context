@@ -33,7 +33,9 @@ type Notification struct {
 	SubjectMemberName string     `json:"subjectMemberName"`
 	Type              string     `json:"type"`
 	Title             string     `json:"title,omitempty"`
+	TitleEN           string     `json:"titleEn,omitempty"`
 	Message           string     `json:"message"`
+	MessageEN         string     `json:"messageEn,omitempty"`
 	ActionURL         string     `json:"actionUrl,omitempty"`
 	CreatedAt         time.Time  `json:"createdAt"`
 	ReadAt            *time.Time `json:"readAt,omitempty"`
@@ -65,7 +67,11 @@ CREATE TABLE IF NOT EXISTS notifications (
   recipient_member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
   subject_member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
   type TEXT NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  title_en TEXT NOT NULL DEFAULT '',
   message TEXT NOT NULL,
+  message_en TEXT NOT NULL DEFAULT '',
+  action_url TEXT NOT NULL DEFAULT '',
   incident_key TEXT NOT NULL,
   created_at TEXT NOT NULL,
   read_at TEXT,
@@ -113,7 +119,7 @@ func ensureNotificationDeliveryColumns(ctx context.Context, db *sql.DB) error {
 	if err := rows.Close(); err != nil {
 		return err
 	}
-	for _, column := range []string{"title", "action_url"} {
+	for _, column := range []string{"title", "title_en", "message_en", "action_url"} {
 		if found[column] {
 			continue
 		}
@@ -372,7 +378,7 @@ func (s *store) listNotifications(ctx context.Context, familyID, memberID string
 		}
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT n.id, n.family_id, n.recipient_member_id, n.subject_member_id, m.name, n.type, n.title, n.message, n.action_url, n.created_at, n.read_at
+	rows, err := s.db.QueryContext(ctx, `SELECT n.id, n.family_id, n.recipient_member_id, n.subject_member_id, m.name, n.type, n.title, n.title_en, n.message, n.message_en, n.action_url, n.created_at, n.read_at
 		FROM notifications n JOIN members m ON m.id = n.subject_member_id
 		WHERE n.family_id = ? AND n.recipient_member_id = ? ORDER BY n.created_at DESC LIMIT 50`, familyID, memberID)
 	if err != nil {
@@ -385,7 +391,7 @@ func (s *store) listNotifications(ctx context.Context, familyID, memberID string
 		var createdAt string
 		var readAt sql.NullString
 		if err := rows.Scan(&notification.ID, &notification.FamilyID, &notification.RecipientMemberID, &notification.SubjectMemberID,
-			&notification.SubjectMemberName, &notification.Type, &notification.Title, &notification.Message, &notification.ActionURL, &createdAt, &readAt); err != nil {
+			&notification.SubjectMemberName, &notification.Type, &notification.Title, &notification.TitleEN, &notification.Message, &notification.MessageEN, &notification.ActionURL, &createdAt, &readAt); err != nil {
 			return nil, err
 		}
 		notification.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt)
@@ -404,24 +410,28 @@ func (s *store) listNotifications(ctx context.Context, familyID, memberID string
 	return notifications, rows.Err()
 }
 
-func (s *store) createBroadcastNotifications(ctx context.Context, familyID, title, message, actionURL string, markNeedsAttention bool, now time.Time) (int, int, error) {
+func (s *store) createBroadcastNotifications(ctx context.Context, familyID, title, titleEN, message, messageEN, actionURL string, markNeedsAttention bool, now time.Time) (int, int, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, 0, err
 	}
 	defer tx.Rollback()
-	rows, err := tx.QueryContext(ctx, `SELECT id FROM members WHERE family_id = ? ORDER BY created_at`, familyID)
+	rows, err := tx.QueryContext(ctx, `SELECT id, role FROM members WHERE family_id = ? ORDER BY created_at`, familyID)
 	if err != nil {
 		return 0, 0, err
 	}
 	memberIDs := make([]string, 0)
+	elderIDs := make([]string, 0)
 	for rows.Next() {
-		var memberID string
-		if err := rows.Scan(&memberID); err != nil {
+		var memberID, role string
+		if err := rows.Scan(&memberID, &role); err != nil {
 			rows.Close()
 			return 0, 0, err
 		}
 		memberIDs = append(memberIDs, memberID)
+		if role == "elder" {
+			elderIDs = append(elderIDs, memberID)
+		}
 	}
 	if err := rows.Close(); err != nil {
 		return 0, 0, err
@@ -431,7 +441,10 @@ func (s *store) createBroadcastNotifications(ctx context.Context, familyID, titl
 	}
 	marked := 0
 	if markNeedsAttention {
-		for _, memberID := range memberIDs {
+		if _, err := tx.ExecContext(ctx, `UPDATE members SET needs_attention = 0 WHERE family_id = ? AND role != 'elder'`, familyID); err != nil {
+			return 0, 0, err
+		}
+		for _, memberID := range elderIDs {
 			if _, err := tx.ExecContext(ctx, `UPDATE members SET needs_attention = 1 WHERE id = ?`, memberID); err != nil {
 				return 0, 0, err
 			}
@@ -446,8 +459,8 @@ func (s *store) createBroadcastNotifications(ctx context.Context, familyID, titl
 	incidentKey := "broadcast:" + newID()
 	created := 0
 	for _, memberID := range memberIDs {
-		res, err := tx.ExecContext(ctx, `INSERT INTO notifications(id, family_id, recipient_member_id, subject_member_id, type, title, message, action_url, incident_key, created_at)
-			VALUES(?, ?, ?, ?, 'demo_broadcast', ?, ?, ?, ?, ?)`, newID(), familyID, memberID, memberID, title, message, actionURL, incidentKey, now.UTC().Format(time.RFC3339Nano))
+		res, err := tx.ExecContext(ctx, `INSERT INTO notifications(id, family_id, recipient_member_id, subject_member_id, type, title, title_en, message, message_en, action_url, incident_key, created_at)
+			VALUES(?, ?, ?, ?, 'demo_broadcast', ?, ?, ?, ?, ?, ?, ?)`, newID(), familyID, memberID, memberID, title, titleEN, message, messageEN, actionURL, incidentKey, now.UTC().Format(time.RFC3339Nano))
 		if err != nil {
 			return 0, 0, err
 		}
@@ -539,7 +552,9 @@ func (a *app) adminBroadcastNotification(w http.ResponseWriter, r *http.Request)
 	var input struct {
 		FamilyID           string `json:"familyId"`
 		Title              string `json:"title"`
+		TitleEN            string `json:"titleEn"`
 		Message            string `json:"message"`
+		MessageEN          string `json:"messageEn"`
 		ActionURL          string `json:"actionUrl"`
 		MarkNeedsAttention bool   `json:"markNeedsAttention"`
 	}
@@ -549,17 +564,19 @@ func (a *app) adminBroadcastNotification(w http.ResponseWriter, r *http.Request)
 	}
 	input.FamilyID = strings.TrimSpace(input.FamilyID)
 	input.Title = strings.TrimSpace(input.Title)
+	input.TitleEN = strings.TrimSpace(input.TitleEN)
 	input.Message = strings.TrimSpace(input.Message)
+	input.MessageEN = strings.TrimSpace(input.MessageEN)
 	input.ActionURL = strings.TrimSpace(input.ActionURL)
 	if input.FamilyID == "" {
 		input.FamilyID = defaultFamilyID
 	}
 	parsedURL, err := url.Parse(input.ActionURL)
-	if input.Title == "" || len([]rune(input.Title)) > 120 || input.Message == "" || len([]rune(input.Message)) > 500 || err != nil || parsedURL.Scheme != "https" || parsedURL.Host == "" || parsedURL.User != nil {
-		writeError(w, http.StatusBadRequest, "通知标题、内容或 HTTPS 链接不正确")
+	if input.Title == "" || len([]rune(input.Title)) > 120 || input.TitleEN == "" || len([]rune(input.TitleEN)) > 120 || input.Message == "" || len([]rune(input.Message)) > 500 || input.MessageEN == "" || len([]rune(input.MessageEN)) > 500 || err != nil || parsedURL.Scheme != "https" || parsedURL.Host == "" || parsedURL.User != nil {
+		writeError(w, http.StatusBadRequest, "中英文通知标题、内容或 HTTPS 链接不正确")
 		return
 	}
-	created, marked, err := a.store.createBroadcastNotifications(r.Context(), input.FamilyID, input.Title, input.Message, input.ActionURL, input.MarkNeedsAttention, time.Now().UTC())
+	created, marked, err := a.store.createBroadcastNotifications(r.Context(), input.FamilyID, input.Title, input.TitleEN, input.Message, input.MessageEN, input.ActionURL, input.MarkNeedsAttention, time.Now().UTC())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "暂时无法创建家庭通知")
 		return
