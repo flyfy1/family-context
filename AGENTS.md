@@ -21,3 +21,8 @@
 - Name each work log using `YYYY-MM-DD-<task-name>`, with the calendar date followed by a short, specific task name.
 - Record the goal, task-owned changes, verification evidence, blockers, and commit or push state. Never include credentials or other secrets.
 - Sync the work log through the existing `life` CLI and confirm that the corresponding Note reports `synced: true`.
+
+## Commits
+
+- After completing and verifying each self-contained unit of change, commit that unit immediately before starting the next one. Do not wait until the end of the task to batch completed units into one commit.
+- Stage and commit only the files or hunks owned by that unit. Preserve unrelated staged, unstaged, and untracked work.
