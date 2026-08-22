@@ -84,6 +84,29 @@ erDiagram
         datetime created_at
     }
 
+    JUDGMENT_PROMPTS {
+        string id PK
+        string member_id FK
+        string name
+        string instruction
+        datetime created_at
+        datetime updated_at
+    }
+
+    JUDGMENT_EVALUATIONS {
+        string id PK
+        string update_id FK
+        string prompt_id FK
+        string member_id FK
+        string prompt_snapshot
+        string model
+        string decision
+        string organized_text
+        string reason
+        json sensitive_flags_json
+        datetime created_at
+    }
+
     AUDIT_EVENTS {
         string id PK
         string event_type
@@ -97,6 +120,10 @@ erDiagram
     QUESTIONS ||--o{ ARCHIVED_ANSWERS : "keeps rerecord history"
     ANSWERS ||--o{ REPLIES : "receives after sharing"
     MEMBERS ||--o{ UPDATES : "creates"
+    MEMBERS ||--o{ JUDGMENT_PROMPTS : "defines"
+    MEMBERS ||--o{ JUDGMENT_EVALUATIONS : "owns"
+    JUDGMENT_PROMPTS ||--o{ JUDGMENT_EVALUATIONS : "is snapshotted by"
+    UPDATES ||--o{ JUDGMENT_EVALUATIONS : "is evaluated by"
 ```
 
 The diagram only draws enforced foreign keys. The following are logical references stored as plain text and are not constrained by SQLite:
@@ -113,6 +140,7 @@ The diagram only draws enforced foreign keys. The following are logical referenc
 | P1 communication loop | `questions`, `answers`, `archived_answers`, `replies` | Question → recorded answer → AI result → confirmation → reply | Implemented and covered by backend tests |
 | Traceability | `audit_events` | Append state-change payloads and reconstruct question/answer history | Implemented; permanent erasure semantics remain unresolved |
 | Family context expansion | `members`, `updates`, `daily_summaries` | Member spaces, text/voice updates, family summaries | Backend APIs exist; not part of the current P1 Web experience |
+| Personal judgment | `judgment_prompts`, `judgment_evaluations` | Member-owned Prompt profiles, structured AI advice, and explicit manual sharing | Backend text loop implemented; UI, photos, and automatic sharing are deferred |
 | Family and identity | No dedicated tables | Currently represented by `family_id` and free-form names | Temporary prototype only |
 
 ## 3. Core state transitions
@@ -127,6 +155,9 @@ stateDiagram-v2
     state "Answer shared" as a_shared
     state "Archived answer row" as a_archived
     state "Replies allowed" as replies
+    state "Private thought" as thought_private
+    state "Structured judgment ready" as judgment_ready
+    state "Family-visible thought" as thought_shared
 
     [*] --> q_pending: create question
     q_pending --> q_answered: recording persisted
@@ -140,6 +171,10 @@ stateDiagram-v2
     a_ready --> a_archived: rerecord
     a_failed --> a_archived: rerecord
     a_shared --> replies: create reply
+
+    [*] --> thought_private: member saves text
+    thought_private --> judgment_ready: Prompt evaluation succeeds
+    judgment_ready --> thought_shared: member explicitly confirms
 ```
 
 Current values used by the code:
@@ -149,7 +184,8 @@ Current values used by the code:
 - `members.role`: `member`, `elder`
 - `updates.type`: currently `text`, `voice`
 - `updates.visibility`: `private`, `family`
-- `updates.source`: currently `member`, `member_voice`, `member_voice_processing_failed`
+- `updates.source`: currently `member`, `member_voice`, `member_voice_processing_failed`, `member_thought`
+- `judgment_evaluations.decision`: `suggest_share`, `keep_private`, `review`
 
 These values are validated in application code where applicable, but the database has no `CHECK` constraints.
 
@@ -212,6 +248,8 @@ flowchart TD
 - Member creation, member updates, voice updates, and daily summaries write files before the SQLite transaction. If the later database write fails, an orphan file can remain.
 - SQLite uses one open connection, WAL journal mode, `synchronous=FULL`, foreign keys, and a 5-second busy timeout.
 - Re-recording intentionally preserves old audio and copies the answer row into `archived_answers` before deleting the current row.
+- A judgment Prompt is copied into `judgment_evaluations.prompt_snapshot`, so later Prompt edits cannot silently change the historical basis for a decision.
+- New thoughts are always inserted with `visibility=private`; Gemini only records advice, and a separate owner-authorized request changes visibility to `family`.
 
 ## 6. Review findings
 
@@ -233,6 +271,7 @@ flowchart TD
 8. **Status and enum constraints live only in Go.** Invalid values could enter through manual operations or future code paths.
 9. **Daily-summary provenance is lossy.** Only `family_id`, date, and `update_count` are stored, so the exact input update set cannot be audited later.
 10. **Two content models overlap.** `questions/answers/replies` power the validated P1 loop, while `updates/daily_summaries/spaces` point toward the broader Family Daily vision. A product decision is needed before merging them or building more UI on the second model.
+11. **Judgment tables currently use lazy idempotent creation.** This avoids colliding with concurrent migration work, but they should move into the chosen versioned migration system before production rollout.
 
 ## 7. Recommended review order
 
