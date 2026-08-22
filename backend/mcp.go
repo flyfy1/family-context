@@ -129,6 +129,10 @@ func (a *app) validMCPSession(sessionID, memberID string) bool {
 func memberMCPTools() []map[string]any {
 	return []map[string]any{
 		{"name": "list_updates", "description": "List updates in this member's private Space", "inputSchema": objectSchema(map[string]any{}, []string{})},
+		{"name": "list_family_updates", "description": "List recent family-visible updates with author details. Never returns another member's private updates", "inputSchema": objectSchema(map[string]any{
+			"since": map[string]any{"type": "string", "format": "date-time", "description": "Optional RFC 3339 earliest creation time"},
+			"limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 100, "default": 50},
+		}, []string{})},
 		{"name": "get_share_policy", "description": "Read this member's automatic sharing policy and prompt", "inputSchema": objectSchema(map[string]any{}, []string{})},
 		{"name": "list_context_files", "description": "List files in this member's isolated context directory", "inputSchema": objectSchema(map[string]any{}, []string{})},
 		{"name": "read_context_file", "description": "Read one UTF-8 context file owned by this member", "inputSchema": objectSchema(map[string]any{"name": map[string]any{"type": "string"}}, []string{"name"})},
@@ -157,6 +161,8 @@ func (a *app) callMCPTool(w http.ResponseWriter, r *http.Request, request mcpReq
 	switch params.Name {
 	case "list_updates":
 		result, err = a.store.listUpdates(r.Context(), member.FamilyID, member.ID, "mine")
+	case "list_family_updates":
+		result, err = a.listMCPFamilyUpdates(r, member, params.Arguments)
 	case "get_share_policy":
 		result, err = a.store.getMemberSettings(r.Context(), member.ID)
 	case "list_context_files":
@@ -180,6 +186,38 @@ func (a *app) callMCPTool(w http.ResponseWriter, r *http.Request, request mcpReq
 		"content":           []map[string]any{{"type": "text", "text": string(data)}},
 		"structuredContent": map[string]any{"result": result},
 	})
+}
+
+func (a *app) listMCPFamilyUpdates(r *http.Request, member Member, arguments map[string]any) (map[string]any, error) {
+	limit := 50
+	if value, exists := arguments["limit"]; exists {
+		number, ok := value.(float64)
+		if !ok || number < 1 || number > 100 || float64(int(number)) != number {
+			return nil, errors.New("limit must be an integer from 1 to 100")
+		}
+		limit = int(number)
+	}
+	since := time.Unix(0, 0).UTC()
+	if value := stringArgument(arguments, "since"); value != "" {
+		parsed, err := time.Parse(time.RFC3339, value)
+		if err != nil {
+			return nil, errors.New("since must be an RFC 3339 date-time")
+		}
+		since = parsed
+	}
+	updates, err := a.store.sharedUpdatesSince(r.Context(), member.FamilyID, since, limit)
+	if err != nil {
+		return nil, err
+	}
+	members, err := a.store.listMembers(r.Context(), member.FamilyID)
+	if err != nil {
+		return nil, err
+	}
+	authors := make(map[string]map[string]string)
+	for _, familyMember := range members {
+		authors[familyMember.ID] = map[string]string{"id": familyMember.ID, "name": familyMember.Name, "role": familyMember.Role}
+	}
+	return map[string]any{"updates": updates, "authors": authors}, nil
 }
 
 func (a *app) listMemberContextFiles(memberID string) ([]map[string]any, error) {

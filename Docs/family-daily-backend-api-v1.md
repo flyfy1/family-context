@@ -39,7 +39,7 @@ spaces/members/<member-id>/
 ├── imports/                # 手机媒体导入元数据与 AI 分析结果
 ├── summaries/
 ├── jobs/
-└── context/                # MCP 只能读写这里
+└── context/                # MCP 文件工具只能读写这里
 ```
 
 管理员修改可见范围不会物理删除成员的权威记录。将 Update 改为 `private` 时，只移除家庭共享投影，成员 Space 中的原始记录和审计事件继续保留。
@@ -97,7 +97,7 @@ DELETE /api/v1/me/mcp-sessions/{session-id}
 - `review`：预留给“AI 建议、成员确认”的审核流，V1 不自动发布；
 - `auto`：MCP 可以请求创建家庭可见 Update，但必须同时配置非空 Prompt。每次请求都会由 Gemini 根据该 Prompt 返回允许或拒绝；拒绝、无法判断或 AI 调用失败时一律不分享。
 
-Prompt 是策略输入，不是权限本身。即使 Prompt 要求跨成员读取，MCP 也不能越过成员目录和令牌边界。
+Prompt 是策略输入，不是权限本身。即使 Prompt 要求跨成员读取，MCP 也不能读取其他成员的私密内容、目录或令牌边界之外的数据。
 
 ## MCP 接口
 
@@ -155,6 +155,7 @@ V1 工具：
 
 ```text
 list_updates
+list_family_updates
 get_share_policy
 list_context_files
 read_context_file
@@ -164,7 +165,9 @@ create_update
 
 文件工具只接受扁平的 `.md`、`.txt` 或 `.json` 文件名，单文件最大 512KB。不能使用绝对路径、`..`、子目录、符号链接、NAS 根路径或执行命令。
 
-Claude Code 使用具名 Bearer 会话；ChatGPT 使用 OAuth 发现、PKCE 和轮换 Refresh Token。两种入口最终都只解析为一个成员身份，文件工具仍然只能访问该成员的 `context/`。
+`list_updates` 读取当前成员自己的 Space，包括自己的 private 与 family 动态。`list_family_updates` 只读取同一家庭内标记为 family 的动态，并返回作者姓名/角色；支持可选 RFC 3339 `since` 和 1–100 的 `limit`，不会返回其他成员的 private 动态或其他家庭的数据。
+
+Claude Code 使用具名 Bearer 会话；ChatGPT 使用 OAuth 发现、PKCE 和轮换 Refresh Token。两种入口最终都只解析为一个成员身份：可以读取这个成员自己的 Space、全家可见动态和该成员的 `context/`，但不能读取其他成员私密内容。
 
 兼容性依据：[MCP 2025-11-25 Authorization](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization)、[OpenAI MCP 文档](https://developers.openai.com/api/docs/mcp/) 和 [Claude Code MCP 文档](https://code.claude.com/docs/id/mcp)。
 
