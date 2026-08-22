@@ -435,13 +435,22 @@ function ElderView({ api, members, currentMember, notify, refreshKey }) {
     const timer = window.setInterval(() => reload().catch(error => notify(error.message)), 10 * 60 * 1000);
     return () => window.clearInterval(timer);
   }, [reload, notify]);
+  const move = useCallback(direction => {
+    reload().catch(error => notify(error.message));
+    setActiveIndex(index => updates.length ? (index + direction + updates.length) % updates.length : 0);
+  }, [reload, notify, updates.length]);
+  useEffect(() => {
+    function navigate(event) {
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(event.target?.tagName)) return;
+      if (event.code === "ArrowLeft") { event.preventDefault(); move(-1); }
+      if (event.code === "ArrowRight") { event.preventDefault(); move(1); }
+    }
+    addEventListener("keydown", navigate);
+    return () => removeEventListener("keydown", navigate);
+  }, [move]);
   if (!currentMember) return null;
   const activeUpdate = updates[activeIndex];
   const activeMember = members.find(member => member.id === activeUpdate?.memberId);
-  function move(direction) {
-    reload().catch(error => notify(error.message));
-    setActiveIndex(index => updates.length ? (index + direction + updates.length) % updates.length : 0);
-  }
   function finishSwipe(event) {
     if (!touchStart.current) return;
     const deltaX = event.changedTouches[0].clientX - touchStart.current.x;
@@ -464,9 +473,9 @@ function ElderView({ api, members, currentMember, notify, refreshKey }) {
       {activeUpdate
         ? <ElderUpdate update={activeUpdate} member={activeMember} api={api} notify={notify} />
         : <EmptyState icon="☀" title={tx("No new family messages", "还没有新的家庭消息")} text={tx("New updates from your family will appear here automatically.", "家人发布新动态后，会自动显示在这里。")} />}
-      {updates.length > 1 && <div className="elder-pager"><button type="button" aria-label={tx("Previous update and refresh", "上一条并刷新")} onClick={() => move(-1)}>←</button><span>{activeIndex + 1} / {updates.length} · {tx("Swipe left or right to refresh", "左右滑动即可刷新")}</span><button type="button" aria-label={tx("Next update and refresh", "下一条并刷新")} onClick={() => move(1)}>→</button></div>}
+      {updates.length > 1 && <div className="elder-pager"><button type="button" aria-label={tx("Previous update and refresh", "上一条并刷新")} onClick={() => move(-1)}>←</button><span>{activeIndex + 1} / {updates.length} · {tx("Use arrow keys or swipe left and right", "用方向键或左右滑动切换")}</span><button type="button" aria-label={tx("Next update and refresh", "下一条并刷新")} onClick={() => move(1)}>→</button></div>}
     </section>
-    <HoldVideoRecorder api={api} member={currentMember} notify={notify} onCreated={reload} />
+    <HoldRecorder api={api} member={currentMember} notify={notify} onCreated={reload} />
   </div>;
 }
 
@@ -481,87 +490,108 @@ function ElderUpdate({ update, member, api, notify }) {
   </article>;
 }
 
-function HoldVideoRecorder({ api, member, notify, onCreated }) {
+function HoldRecorder({ api, member, notify, onCreated }) {
   const { tx } = useLanguage();
-  const [recording, setRecording] = useState(false);
+  const [recordingMode, setRecordingMode] = useState("");
   const [busy, setBusy] = useState(false);
+  const [busyMode, setBusyMode] = useState("");
   const [seconds, setSeconds] = useState(0);
   const [previewStream, setPreviewStream] = useState(null);
   const state = useRef(null);
   const starting = useRef(false);
-  const releaseRequested = useRef(false);
+  const releaseRequested = useRef({ audio: false, video: false });
   const preview = useRef(null);
 
   useEffect(() => () => state.current?.stream?.getTracks().forEach(track => track.stop()), []);
   useEffect(() => { if (preview.current) preview.current.srcObject = previewStream; }, [previewStream]);
   useEffect(() => {
-    if (!recording) return;
+    if (!recordingMode) return;
     const timer = setInterval(() => setSeconds(value => value + 1), 1000);
     return () => clearInterval(timer);
-  }, [recording]);
+  }, [recordingMode]);
   useEffect(() => {
     function keyDown(event) {
-      if (event.code !== "Space" || event.repeat || ["INPUT", "TEXTAREA", "SELECT"].includes(event.target?.tagName)) return;
-      event.preventDefault(); releaseRequested.current = false; start();
+      if (event.repeat || ["INPUT", "TEXTAREA", "SELECT"].includes(event.target?.tagName)) return;
+      const mode = event.code === "Space" ? "audio" : event.code === "KeyV" ? "video" : "";
+      if (!mode) return;
+      event.preventDefault(); releaseRequested.current[mode] = false; start(mode);
     }
     function keyUp(event) {
-      if (event.code !== "Space") return;
-      event.preventDefault(); stop();
+      const mode = event.code === "Space" ? "audio" : event.code === "KeyV" ? "video" : "";
+      if (!mode) return;
+      event.preventDefault(); stop(mode);
     }
     addEventListener("keydown", keyDown); addEventListener("keyup", keyUp);
     return () => { removeEventListener("keydown", keyDown); removeEventListener("keyup", keyUp); };
   });
 
-  async function start() {
-    if (recording || busy || starting.current) return;
-    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) return notify(tx("This browser does not support video recording", "当前浏览器不支持录像"));
+  async function start(mode) {
+    if (state.current || recordingMode || busy || starting.current) return;
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) return notify(tx("This browser does not support recording", "当前浏览器不支持录制"));
     starting.current = true;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } } });
-      const types = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
+      const stream = await navigator.mediaDevices.getUserMedia(mode === "video" ? { audio: true, video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } } } : { audio: true });
+      const types = mode === "video" ? ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"] : ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
       const mimeType = types.find(type => MediaRecorder.isTypeSupported(type)) || "";
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       const chunks = [];
       recorder.ondataavailable = event => event.data.size && chunks.push(event.data);
       recorder.onstop = async () => {
         stream.getTracks().forEach(track => track.stop());
-        setRecording(false); setPreviewStream(null); setBusy(true);
-        const type = (recorder.mimeType || "video/webm").split(";")[0];
-        const form = new FormData();
-        const clientMediaID = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-        form.append("deviceId", "elder-web"); form.append("clientMediaId", clientMediaID); form.append("capturedAt", new Date().toISOString());
-        form.append("media", new Blob(chunks, { type }), `elder-update.${type.includes("mp4") ? "mp4" : "webm"}`);
+        setRecordingMode(""); setPreviewStream(null); setBusy(true); setBusyMode(mode);
+        const type = (recorder.mimeType || (mode === "video" ? "video/webm" : "audio/webm")).split(";")[0];
         try {
-          const imported = await api("/api/v1/me/media-imports", { method: "POST", body: form });
-          if (!imported.updateId) await api(`/api/v1/me/media-imports/${encodeURIComponent(imported.id)}/decision`, { method: "POST", body: JSON.stringify({ visibility: "family", caption: tx("Shared a video message", "分享了一段视频留言") }) });
-          notify(tx("Your video was saved to your Space and shared with the family", "视频已保存到你的 Space，并分享给家人"));
+          if (mode === "video") {
+            const form = new FormData();
+            const clientMediaID = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+            form.append("deviceId", "elder-web"); form.append("clientMediaId", clientMediaID); form.append("capturedAt", new Date().toISOString());
+            form.append("media", new Blob(chunks, { type }), `elder-update.${type.includes("mp4") ? "mp4" : "webm"}`);
+            const imported = await api("/api/v1/me/media-imports", { method: "POST", body: form });
+            if (!imported.updateId) await api(`/api/v1/me/media-imports/${encodeURIComponent(imported.id)}/decision`, { method: "POST", body: JSON.stringify({ visibility: "family", caption: tx("Shared a video message", "分享了一段视频留言") }) });
+            notify(tx("Your video was saved to your Space and shared with the family", "视频已保存到你的 Space，并分享给家人"));
+          } else {
+            const form = new FormData();
+            form.append("familyId", FAMILY_ID); form.append("memberId", member.id); form.append("visibility", "family");
+            form.append("audio", new Blob(chunks, { type }), `elder-update.${type.includes("mp4") ? "m4a" : "webm"}`);
+            await api("/api/v1/updates/voice", { method: "POST", body: form });
+            notify(tx("Your audio was organized and shared with the family", "语音已整理并分享给家人"));
+          }
           await onCreated();
         }
         catch (error) { notify(error.message); }
-        finally { setBusy(false); setSeconds(0); state.current = null; }
+        finally { setBusy(false); setBusyMode(""); setSeconds(0); state.current = null; }
       };
-      state.current = { recorder, stream };
-      recorder.start(1000); setSeconds(0); setPreviewStream(stream); setRecording(true); notify(tx("Recording — release Space when finished", "正在录像，松开空格键即可结束"));
-      if (releaseRequested.current) recorder.stop();
-    } catch (error) { notify(error.name === "NotAllowedError" ? tx("Please allow camera and microphone access", "请允许浏览器使用摄像头和麦克风") : tx("Unable to start video recording", "暂时无法开始录像")); }
+      state.current = { recorder, stream, mode };
+      recorder.start(1000); setSeconds(0); setPreviewStream(mode === "video" ? stream : null); setRecordingMode(mode);
+      notify(mode === "video" ? tx("Recording video — release V when finished", "正在录像，松开 V 键即可结束") : tx("Recording audio — release Space when finished", "正在录音，松开空格键即可结束"));
+      if (releaseRequested.current[mode]) recorder.stop();
+    } catch (error) { notify(error.name === "NotAllowedError" ? (mode === "video" ? tx("Please allow camera and microphone access", "请允许浏览器使用摄像头和麦克风") : tx("Please allow microphone access", "请允许浏览器使用麦克风")) : tx("Unable to start recording", "暂时无法开始录制")); }
     finally { starting.current = false; }
   }
-  function stop() {
-    releaseRequested.current = true;
+  function stop(mode) {
+    releaseRequested.current[mode] = true;
     const recorder = state.current?.recorder;
-    if (recorder?.state === "recording") recorder.stop();
+    if (state.current?.mode === mode && recorder?.state === "recording") recorder.stop();
   }
   useEffect(() => {
-    if (!recording) return;
-    const limit = window.setTimeout(stop, 90 * 1000);
+    if (!recordingMode) return;
+    const limit = window.setTimeout(() => stop(recordingMode), 90 * 1000);
     return () => window.clearTimeout(limit);
-  }, [recording]);
-  return <section className={`elder-recorder ${recording ? "recording" : ""}`}>
-    {recording && <video ref={preview} muted playsInline autoPlay className="elder-camera-preview" />}
-    <button type="button" className="hold-record-button" disabled={busy} onPointerDown={event => { event.currentTarget.setPointerCapture?.(event.pointerId); releaseRequested.current = false; start(); }} onPointerUp={stop} onPointerCancel={stop} onContextMenu={event => event.preventDefault()}>
-      <span>{busy ? "…" : recording ? "■" : "●"}</span><strong>{busy ? tx("Saving and sharing…", "正在保存并分享…") : recording ? `${formatDuration(seconds)} · ${tx("Release to send", "松开发送")}` : tx("Hold Space to speak and record", "按住空格键说话并录像")}</strong>
-    </button>
-    <p>{tx("Hold the keyboard Space bar, or press and hold this button. Maximum 90 seconds.", "按住键盘空格键，或按住这个按钮；最长 90 秒。")}</p>
+  }, [recordingMode]);
+  function recordButton(mode, shortcut, english, chinese) {
+    const active = recordingMode === mode;
+    const saving = busy && busyMode === mode;
+    return <button type="button" className={`hold-record-button ${mode} ${active ? "active" : ""}`} disabled={busy || Boolean(recordingMode && !active)} onPointerDown={event => { event.currentTarget.setPointerCapture?.(event.pointerId); releaseRequested.current[mode] = false; start(mode); }} onPointerUp={() => stop(mode)} onPointerCancel={() => stop(mode)} onContextMenu={event => event.preventDefault()}>
+      <kbd>{shortcut}</kbd><strong>{saving ? tx("Saving and sharing…", "正在保存并分享…") : active ? `${formatDuration(seconds)} · ${tx("Release to send", "松开发送")}` : tx(english, chinese)}</strong>
+    </button>;
+  }
+  return <section className={`elder-recorder ${recordingMode ? `recording ${recordingMode}` : ""}`}>
+    {recordingMode === "video" && <video ref={preview} muted playsInline autoPlay className="elder-camera-preview" />}
+    <div className="elder-record-actions">
+      {recordButton("audio", "SPACE", "Hold for audio", "按住录音")}
+      {recordButton("video", "V", "Hold for video", "按住录像")}
+    </div>
+    <p>{tx("Space records audio · V records video · release to share · maximum 90 seconds", "空格键录音 · V 键录像 · 松开后分享 · 最长 90 秒")}</p>
   </section>;
 }
 
