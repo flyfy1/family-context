@@ -180,6 +180,25 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
 .color-picker button { width: 23px; height: 23px; padding: 0; border: 3px solid var(--card); border-radius: 50%; box-shadow: 0 0 0 1px var(--line); }
 .color-picker button.active { box-shadow: 0 0 0 2px var(--ink); }
 .add-member .primary-button { justify-self: end; }
+.policy-member { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.policy-member h2 { margin: 0; }
+.policy-member span { color: var(--muted); font-size: 10px; }
+.share-policy-form { display: grid; gap: 17px; }
+.share-policy-form fieldset { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin: 0; padding: 0; border: 0; }
+.share-policy-form legend { margin-bottom: 8px; color: var(--muted); font-size: 11px; font-weight: 750; }
+.share-policy-form fieldset label { position: relative; display: block; cursor: pointer; }
+.share-policy-form fieldset input { position: absolute; opacity: 0; pointer-events: none; }
+.share-policy-form fieldset span { min-height: 82px; display: grid; align-content: center; gap: 5px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: #faf6f0; }
+.share-policy-form fieldset input:checked + span { border-color: var(--rust); background: #f6e8df; box-shadow: 0 0 0 3px rgba(173,76,52,.07); }
+.share-policy-form fieldset strong { color: var(--ink); font-size: 12px; }
+.share-policy-form fieldset small { color: var(--muted); font-size: 9px; line-height: 1.45; }
+.policy-prompt { display: grid; gap: 7px; color: var(--muted); font-size: 11px; font-weight: 750; }
+.policy-prompt textarea { width: 100%; padding: 13px; border: 1px solid var(--line); border-radius: 12px; outline: 0; resize: vertical; color: var(--ink); background: #faf6f0; font-size: 13px; line-height: 1.65; }
+.policy-prompt textarea:focus { border-color: var(--rust); box-shadow: 0 0 0 4px rgba(173,76,52,.08); }
+.policy-prompt small { justify-self: end; font-size: 9px; font-weight: 500; }
+.policy-actions { display: flex; justify-content: space-between; gap: 12px; }
+.policy-boundary { margin: 0; padding: 11px 13px; border-radius: 10px; color: var(--muted); background: rgba(97,114,105,.08); font-size: 10px; line-height: 1.6; }
+.policy-loading { min-height: 210px; display: grid; place-items: center; color: var(--muted); font-size: 11px; }
 .future-boundary { padding: 20px 24px; border: 1px dashed rgba(62,48,40,.2); border-radius: 16px; color: var(--muted); }
 .future-boundary strong { color: var(--ink); font-size: 12px; }.future-boundary p { margin: 6px 0 0; font-size: 11px; line-height: 1.65; }
 
@@ -223,6 +242,7 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
   .space-toolbar { align-items: flex-start; flex-direction: column; }.filter-pills { margin-top: 0; }
   .record-orb { width: 190px; height: 190px; }
   .settings-section { grid-template-columns: 1fr; gap: 22px; padding: 22px; }.tree-nodes { justify-content: flex-start; overflow-x: auto; padding-bottom: 5px; }.tree-nodes::before { left: 56px; right: 56px; }.tree-node { min-width: 108px; }.add-member { grid-template-columns: 1fr; }.add-member .primary-button, .settings-form .primary-button { width: 100%; }
+  .share-policy-form fieldset { grid-template-columns: 1fr; }.share-policy-form fieldset span { min-height: 64px; }.policy-actions { align-items: stretch; flex-direction: column-reverse; }.policy-actions button { width: 100%; }
 }
 
 @media (max-width: 430px) {

@@ -102,7 +102,7 @@ func (a *app) memberCreateImageUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) getSharePolicy(w http.ResponseWriter, r *http.Request) {
-	member := memberFromContext(r.Context())
+	member := judgmentMemberFromContext(r.Context())
 	settings, err := a.store.getMemberSettings(r.Context(), member.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "暂时无法读取分享策略")
@@ -112,7 +112,7 @@ func (a *app) getSharePolicy(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) saveSharePolicy(w http.ResponseWriter, r *http.Request) {
-	member := memberFromContext(r.Context())
+	member := judgmentMemberFromContext(r.Context())
 	var input struct {
 		ShareMode   string `json:"shareMode"`
 		SharePrompt string `json:"sharePrompt"`

@@ -378,8 +378,35 @@ function Settings({ api, config, setConfig, members, currentMember, refresh, not
   return <div className="settings-page">
     <section className="settings-section card"><div><p className="eyebrow">BROWSER CONFIG</p><h2>连接设置</h2><p className="muted-copy">管理员令牌与家庭令牌分开保存，只用于成员配置操作。</p></div><form className="settings-form" onSubmit={saveConnection}><label>家庭名称<input value={form.familyName} onChange={event => setForm({ ...form, familyName: event.target.value })} required /></label><label>后端 API 地址<input value={form.apiBase} onChange={event => setForm({ ...form, apiBase: event.target.value })} placeholder="本地留空；远程填写 https://api.example.com" /></label><label>家庭访问令牌<input type="password" value={form.token} onChange={event => setForm({ ...form, token: event.target.value })} required /></label><label>管理员令牌<input type="password" value={form.adminToken} onChange={event => setForm({ ...form, adminToken: event.target.value })} placeholder="仅管理员需要填写" /></label><button className="primary-button">保存连接</button></form></section>
     <section className="settings-section family-tree-section card"><div><p className="eyebrow">FAMILY TREE</p><h2>家庭成员</h2><p className="muted-copy">管理员会显示专属标记。只有管理员身份和管理员令牌同时就绪，才能进入成员配置。</p></div><div><FamilyTree members={members} />{canManageMembers ? <form className="add-member" onSubmit={addMember}><input value={newMember.name} maxLength="30" onChange={event => setNewMember({ ...newMember, name: event.target.value })} placeholder="成员称呼" required /><select value={newMember.role} onChange={event => setNewMember({ ...newMember, role: event.target.value })}><option value="member">普通成员</option><option value="elder">老人</option><option value="child">孩子</option></select><label className="admin-option"><input type="checkbox" checked={newMember.isAdmin} onChange={event => setNewMember({ ...newMember, isAdmin: event.target.checked })} />设为管理员</label><div className="color-picker">{colors.map(color => <button type="button" aria-label={`选择颜色 ${color}`} key={color} className={newMember.color === color ? "active" : ""} style={{ background: color }} onClick={() => setNewMember({ ...newMember, color })} />)}</div><button className="primary-button" disabled={busy}>{busy ? "正在创建…" : "+ 添加成员"}</button></form> : <div className="admin-gate"><strong>{currentMember?.isAdmin ? "还需要管理员令牌" : "只有管理员可以配置成员"}</strong><p>{currentMember?.isAdmin ? "请在上方连接设置中填写独立的管理员令牌。" : "切换到带有“管理员”标记的家庭成员后，才会显示成员配置。"}</p></div>}</div></section>
+    {currentMember && <SharePolicySettings api={api} member={currentMember} notify={notify} />}
     <section className="future-boundary"><strong>下一阶段边界</strong><p>MCP、成员定时分析任务和家庭摄像头/NAS 数据源会建立在这些独立 Space 上。当前 PoC 不开放任意文件系统访问，也不自动读取监控录像。</p></section>
   </div>;
+}
+
+function SharePolicySettings({ api, member, notify }) {
+  const [policy, setPolicy] = useState({ shareMode: "manual", sharePrompt: "" });
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    api("/api/v1/me/share-policy", { headers: { "X-Member-ID": member.id } })
+      .then(result => active && setPolicy({ shareMode: result.shareMode || "manual", sharePrompt: result.sharePrompt || "" }))
+      .catch(error => active && notify(error.message))
+      .finally(() => active && setLoading(false));
+    return () => { active = false; };
+  }, [api, member.id]);
+  async function save(event) {
+    event.preventDefault(); setBusy(true);
+    try {
+      const result = await api("/api/v1/me/share-policy", { method: "PUT", headers: { "X-Member-ID": member.id }, body: JSON.stringify(policy) });
+      setPolicy({ shareMode: result.shareMode, sharePrompt: result.sharePrompt });
+      notify(`${member.name}的分享规则已保存`);
+    } catch (error) { notify(error.message); }
+    finally { setBusy(false); }
+  }
+  const example = `我是${member.name}。普通家庭生活、旅行、孩子成长、做饭和兴趣活动可以建议分享；工作内容、证件、账户、医疗、财务和精确地址保持私密。图片或文字只适合部分家人时，请明确建议分享对象；无法判断时先保持私密。`;
+  return <section className="settings-section share-policy-section card"><div><p className="eyebrow">PERSONAL SHARE POLICY</p><div className="policy-member"><Avatar member={member} /><div><h2>{member.name}的分享规则</h2><span>当前身份 · {member.role === "elder" ? "老人" : "家庭成员"}</span></div></div><p className="muted-copy">这套规则只属于当前成员，同时用于图片/视频和文字想法的 AI 分享判断。切换右上角身份即可配置另一个人。</p></div>{loading ? <div className="policy-loading">正在读取个人规则…</div> : <form className="share-policy-form" onSubmit={save}><fieldset><legend>AI 可以做什么</legend><label><input type="radio" name={`share-mode-${member.id}`} checked={policy.shareMode === "manual"} onChange={() => setPolicy({ ...policy, shareMode: "manual" })} /><span><strong>只给建议</strong><small>始终由我决定是否分享</small></span></label><label><input type="radio" name={`share-mode-${member.id}`} checked={policy.shareMode === "review"} onChange={() => setPolicy({ ...policy, shareMode: "review" })} /><span><strong>建议后审核</strong><small>整理内容和对象，等待我确认</small></span></label><label><input type="radio" name={`share-mode-${member.id}`} checked={policy.shareMode === "auto"} onChange={() => setPolicy({ ...policy, shareMode: "auto" })} /><span><strong>符合规则时自动分享</strong><small>仅安全且适合全家时生效</small></span></label></fieldset><label className="policy-prompt"><span>我想分享什么、给谁</span><textarea value={policy.sharePrompt} onChange={event => setPolicy({ ...policy, sharePrompt: event.target.value })} maxLength="4000" rows="7" placeholder="写下适合分享的内容、不想分享的内容，以及哪些家人可能会关心……" /><small>{policy.sharePrompt.length} / 4000 · 同时判断图片与文字</small></label><div className="policy-actions"><button type="button" className="secondary-button" onClick={() => setPolicy({ ...policy, sharePrompt: example })}>使用身份示例</button><button className="primary-button" disabled={busy || (policy.shareMode === "auto" && !policy.sharePrompt.trim())}>{busy ? "正在保存…" : `保存${member.name}的规则`}</button></div><p className="policy-boundary">AI 只会给出建议。敏感或无法判断的内容保持私密；建议只给部分成员时，不会自动变成全家可见。</p></form>}</section>;
 }
 
 function AudioButton({ path, api, notify }) {

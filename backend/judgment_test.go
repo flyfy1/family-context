@@ -29,11 +29,25 @@ func TestPrivateThoughtJudgmentRequiresManualShare(t *testing.T) {
 		t.Fatal(err)
 	}
 	app := newApp(store, stubAudioProcessor{}, mediaDir, "test-token")
+	if err := createMemberSpace(app.spacesRoot, member); err != nil {
+		t.Fatal(err)
+	}
 	judgmentRoutes := http.NewServeMux()
 	app.registerJudgmentRoutes(judgmentRoutes)
 	judgmentRoutes.Handle("/", app.routes())
 	server := httptest.NewServer(judgmentRoutes)
 	t.Cleanup(server.Close)
+
+	settings := memberRequestJSON[MemberSettings](t, server.Client(), http.MethodPut, server.URL+"/api/v1/me/share-policy", member.ID, map[string]string{
+		"shareMode": "review", "sharePrompt": "家庭生活图片和文字想法可以建议分享；账户、医疗和地址保持私密。",
+	}, http.StatusOK)
+	if settings.MemberID != member.ID || settings.ShareMode != "review" || settings.SharePrompt == "" {
+		t.Fatalf("browser identity did not save its own share policy: %+v", settings)
+	}
+	loadedSettings := memberRequestJSON[MemberSettings](t, server.Client(), http.MethodGet, server.URL+"/api/v1/me/share-policy", member.ID, nil, http.StatusOK)
+	if loadedSettings.MemberID != member.ID || loadedSettings.SharePrompt != settings.SharePrompt {
+		t.Fatalf("browser identity loaded the wrong share policy: %+v", loadedSettings)
+	}
 
 	prompt := memberRequestJSON[JudgmentPrompt](t, server.Client(), http.MethodPost, server.URL+"/api/v1/me/judgment-prompts", member.ID, map[string]string{
 		"name": "家庭分享判断", "instruction": "判断这条近况是否适合分享给家人，并忠实整理。",
