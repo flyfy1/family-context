@@ -46,7 +46,7 @@ func newAudioProcessorFromEnv() (audioProcessor, error) {
 	return &geminiAudioProcessor{
 		apiKey: key,
 		model:  envOr("GEMINI_MODEL", "gemini-3.7-flash"),
-		client: &http.Client{Timeout: 75 * time.Second},
+		client: &http.Client{Timeout: 150 * time.Second},
 	}, nil
 }
 
