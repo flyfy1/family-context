@@ -14,3 +14,10 @@
 - Preserve the V1 question → voice answer → AI organization → confirmation → reply loop.
 - Do not add distributed storage, queues, sync, NAS dependencies, or replication before real family usage requires them.
 
+## Work logs
+
+- Every task performed in this repository must have a durable Integ.Life work log.
+- Create the work log at the start of a new task and keep updating the same log until the task is complete; follow-up work on the same task must reuse that log.
+- Name each work log using `YYYY-MM-DD-<task-name>`, with the calendar date followed by a short, specific task name.
+- Record the goal, task-owned changes, verification evidence, blockers, and commit or push state. Never include credentials or other secrets.
+- Sync the work log through the existing `life` CLI and confirm that the corresponding Note reports `synced: true`.
