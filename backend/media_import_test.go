@@ -73,7 +73,8 @@ func TestMediaImportReviewIsolationAndShare(t *testing.T) {
 		t.Fatalf("unauthorized status = %d", unauthorized.StatusCode)
 	}
 
-	item := uploadTestMediaImport(t, server, first.AccessToken, "ride.png", "image/png", []byte("\x89PNG\r\n\x1a\nprivate image"))
+	privateImage := []byte("\x89PNG\r\n\x1a\nprivate image")
+	item := uploadTestMediaImport(t, server, first.AccessToken, "ride.png", "image/png", privateImage)
 	if item.AnalysisStatus != "ready" || item.Analysis == nil || item.Analysis.SuggestedVisibility != "family" || item.ShareDecision != "pending" || item.UpdateID != "" {
 		t.Fatalf("unexpected review import: %+v", item)
 	}
@@ -98,6 +99,15 @@ func TestMediaImportReviewIsolationAndShare(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(temp, "spaces", "members", first.Member.ID, "imports", item.ID+".json")); err != nil {
 		t.Fatalf("import metadata missing: %v", err)
+	}
+	ownerFile := memberRequest(t, server, first.AccessToken, http.MethodGet, item.MediaURL, nil, "")
+	ownerData, err := io.ReadAll(ownerFile.Body)
+	ownerFile.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ownerFile.StatusCode != http.StatusOK || !bytes.Equal(ownerData, privateImage) {
+		t.Fatalf("owner private file status = %d, body = %q", ownerFile.StatusCode, ownerData)
 	}
 
 	cross := memberRequest(t, server, second.AccessToken, http.MethodGet, "/api/v1/me/media-imports/"+item.ID, nil, "application/json")

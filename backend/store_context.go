@@ -74,10 +74,15 @@ func (s *store) dismissMemberAttention(ctx context.Context, familyID, memberID, 
 }
 
 func (s *store) memberCanReadMedia(ctx context.Context, viewerMemberID, ownerMemberID, fileName string) (bool, error) {
-	var count int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM updates
-		WHERE member_id = ? AND audio_file = ? AND (visibility = 'family' OR member_id = ?)`, ownerMemberID, fileName, viewerMemberID).Scan(&count)
-	return count == 1, err
+	var allowed bool
+	err := s.db.QueryRowContext(ctx, `SELECT EXISTS(
+		SELECT 1 FROM updates
+		WHERE member_id = ? AND audio_file = ? AND (visibility = 'family' OR member_id = ?)
+		UNION ALL
+		SELECT 1 FROM media_imports
+		WHERE member_id = ? AND media_file = ? AND member_id = ?
+	)`, ownerMemberID, fileName, viewerMemberID, ownerMemberID, fileName, viewerMemberID).Scan(&allowed)
+	return allowed, err
 }
 
 func (s *store) createUpdate(ctx context.Context, update Update, audioFile string) error {
