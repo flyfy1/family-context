@@ -27,7 +27,7 @@ func TestGeminiBedtimeStoryAndTTSLive(t *testing.T) {
 		t.Fatal("configured AI processor does not support TTS")
 	}
 	now := time.Now().UTC()
-	child := Member{ID: "child-live", FamilyID: defaultFamilyID, Name: "小星", Role: "member", CreatedAt: now}
+	child := Member{ID: "child-live", FamilyID: defaultFamilyID, Name: "小星", Role: "child", CreatedAt: now}
 	parent := Member{ID: "parent-live", FamilyID: defaultFamilyID, Name: "妈妈", Role: "member", CreatedAt: now}
 	updates := []Update{{ID: "update-live", FamilyID: defaultFamilyID, MemberID: parent.ID, Type: "text", Text: "今天妈妈和小星一起在阳台给薄荷浇水，发现长出了一片新叶子。", Visibility: "family", CreatedAt: now}}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)

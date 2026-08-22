@@ -53,6 +53,10 @@ func (a *app) createBedtimeStory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "暂时无法读取孩子信息")
 		return
 	}
+	if child.Role != "child" {
+		writeError(w, http.StatusBadRequest, "请选择标记为孩子的家庭成员")
+		return
+	}
 	updates, err := a.store.sharedUpdatesSince(r.Context(), input.FamilyID, time.Now().UTC().Add(-time.Duration(input.Days)*24*time.Hour), 40)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "暂时无法读取家庭 Context")

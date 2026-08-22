@@ -46,7 +46,7 @@ func TestBedtimeStoryUsesOnlySharedContextAndPersistsAudio(t *testing.T) {
 	t.Cleanup(func() { store.Close() })
 	processor := &recordingBedtimeProcessor{}
 	application := newApp(store, processor, filepath.Join(temp, "media"), "test-token")
-	child := Member{ID: "child-1", FamilyID: defaultFamilyID, Name: "瓜瓜", Role: "member", Color: "#54706A", CreatedAt: time.Now().UTC()}
+	child := Member{ID: "child-1", FamilyID: defaultFamilyID, Name: "瓜瓜", Role: "child", Color: "#54706A", CreatedAt: time.Now().UTC()}
 	parent := Member{ID: "parent-1", FamilyID: defaultFamilyID, Name: "爸爸", Role: "member", Color: "#AD4C34", CreatedAt: time.Now().UTC().Add(time.Second)}
 	for _, member := range []Member{child, parent} {
 		if err := createMemberSpace(application.spacesRoot, member); err != nil {
@@ -109,7 +109,7 @@ func TestBedtimeStoryKeepsTextWhenTTSFails(t *testing.T) {
 	t.Cleanup(func() { store.Close() })
 	processor := &recordingBedtimeProcessor{synthErr: errors.New("tts unavailable")}
 	application := newApp(store, processor, filepath.Join(temp, "media"), "test-token")
-	child := Member{ID: "child-2", FamilyID: defaultFamilyID, Name: "小雨", Role: "member", Color: "#54706A", CreatedAt: time.Now().UTC()}
+	child := Member{ID: "child-2", FamilyID: defaultFamilyID, Name: "小雨", Role: "child", Color: "#54706A", CreatedAt: time.Now().UTC()}
 	if err := createMemberSpace(application.spacesRoot, child); err != nil {
 		t.Fatal(err)
 	}
