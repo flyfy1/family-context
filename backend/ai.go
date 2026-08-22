@@ -132,18 +132,25 @@ type geminiAudioProcessor struct {
 }
 
 func (g *geminiAudioProcessor) Process(ctx context.Context, audio []byte, mimeType string) (AudioResult, error) {
+	encodedAudio := base64.StdEncoding.EncodeToString(audio)
 	parts := []geminiGeneratePart{
-		{Text: `请处理这段家庭语音。输出简体中文 JSON：
-1. transcript：尽可能忠实的逐字转写，保留人名、金额、日期和不确定语气。
-2. summary：一到两句简短、自然的整理结果。
-不要补充录音中没有的事实，不要做健康诊断，不要把猜测改成确定事实。`},
-		{InlineData: &geminiGenerateInlineData{MimeType: mimeType, Data: base64.StdEncoding.EncodeToString(audio)}},
+		{Text: `Process this family voice recording and return JSON.
+1. transcript is mandatory. Transcribe the speech faithfully in its original spoken language. Preserve Chinese as Chinese, English as English, and preserve each language where the recording mixes them. Do not translate or paraphrase the transcript. Keep names, amounts, dates, hesitations, and uncertainty. Use [听不清] for unclear Chinese speech and [inaudible] for unclear English speech instead of guessing.
+2. summary is a short, natural one- or two-sentence organization of the recording, written in its dominant language.
+Do not add facts, make health diagnoses, or turn guesses into certainty.`},
+		{InlineData: &geminiGenerateInlineData{MimeType: mimeType, Data: encodedAudio}},
 	}
 	schema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"transcript": map[string]any{"type": "string"},
-			"summary":    map[string]any{"type": "string"},
+			"transcript": map[string]any{
+				"type":        "string",
+				"description": "A faithful verbatim transcript in the original spoken language or languages. Never translate it.",
+			},
+			"summary": map[string]any{
+				"type":        "string",
+				"description": "A concise faithful summary in the recording's dominant language.",
+			},
 		},
 		"required": []string{"transcript", "summary"},
 	}
@@ -151,10 +158,46 @@ func (g *geminiAudioProcessor) Process(ctx context.Context, audio []byte, mimeTy
 	if err := g.generateJSON(ctx, "gemini audio processing", g.model, parts, schema, &result, 2<<20); err != nil {
 		return AudioResult{}, err
 	}
-	if result.Transcript == "" || result.Summary == "" {
-		return AudioResult{}, errors.New("gemini returned empty transcript or summary")
+	result.Transcript = strings.TrimSpace(result.Transcript)
+	result.Summary = strings.TrimSpace(result.Summary)
+	if result.Transcript == "" {
+		transcript, err := g.transcribeAudio(ctx, encodedAudio, mimeType)
+		if err != nil {
+			return AudioResult{}, err
+		}
+		result.Transcript = transcript
+	}
+	if result.Transcript == "" {
+		return AudioResult{}, errors.New("gemini returned empty transcript")
+	}
+	if result.Summary == "" {
+		result.Summary = result.Transcript
 	}
 	return result, nil
+}
+
+func (g *geminiAudioProcessor) transcribeAudio(ctx context.Context, encodedAudio, mimeType string) (string, error) {
+	parts := []geminiGeneratePart{
+		{Text: `Transcribe this voice recording faithfully. Return only JSON with transcript. Keep every utterance in its original spoken language: preserve Chinese as Chinese, English as English, and mixed-language speech as mixed language. Do not translate, summarize, paraphrase, or invent unclear words. Use [听不清] for unclear Chinese speech and [inaudible] for unclear English speech.`},
+		{InlineData: &geminiGenerateInlineData{MimeType: mimeType, Data: encodedAudio}},
+	}
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"transcript": map[string]any{
+				"type":        "string",
+				"description": "A faithful verbatim transcript in the original spoken language or languages. Never translate it.",
+			},
+		},
+		"required": []string{"transcript"},
+	}
+	var result struct {
+		Transcript string `json:"transcript"`
+	}
+	if err := g.generateJSON(ctx, "gemini audio transcription retry", g.model, parts, schema, &result, 2<<20); err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(result.Transcript), nil
 }
 
 func (g *geminiAudioProcessor) Summarize(ctx context.Context, updates []Update, members []Member, language string) (string, error) {

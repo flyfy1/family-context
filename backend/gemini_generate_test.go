@@ -63,6 +63,67 @@ func TestGeminiProcessUsesGenerateContent(t *testing.T) {
 	}
 }
 
+func TestGeminiProcessRetriesWhenTranscriptIsEmpty(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var payload struct {
+			Contents []struct {
+				Parts []geminiGeneratePart `json:"parts"`
+			} `json:"contents"`
+		}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatal(err)
+		}
+		if len(payload.Contents) != 1 || len(payload.Contents[0].Parts) != 2 {
+			t.Fatalf("unexpected contents: %+v", payload.Contents)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if calls == 1 {
+			_, _ = io.WriteString(w, `{"candidates":[{"content":{"parts":[{"text":"{\"transcript\":\"\",\"summary\":\"Tea was good.\"}"}]}}]}`)
+			return
+		}
+		if !strings.Contains(payload.Contents[0].Parts[0].Text, "original spoken language") {
+			t.Fatalf("retry prompt does not preserve original language: %q", payload.Contents[0].Parts[0].Text)
+		}
+		_, _ = io.WriteString(w, `{"candidates":[{"content":{"parts":[{"text":"{\"transcript\":\"I had a cup of tea.\"}"}]}}]}`)
+	}))
+	defer server.Close()
+
+	processor := &geminiAudioProcessor{apiKey: "test-key", model: "gemini-flash-latest", client: &http.Client{Timeout: time.Second}, baseURL: server.URL}
+	result, err := processor.Process(context.Background(), []byte("audio"), "audio/wav")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 {
+		t.Fatalf("calls = %d, want 2", calls)
+	}
+	if result.Transcript != "I had a cup of tea." || result.Summary != "Tea was good." {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
+func TestGeminiProcessUsesTranscriptWhenSummaryIsEmpty(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"candidates":[{"content":{"parts":[{"text":"{\"transcript\":\"今天喝了一杯茶。\",\"summary\":\"\"}"}]}}]}`)
+	}))
+	defer server.Close()
+
+	processor := &geminiAudioProcessor{apiKey: "test-key", model: "gemini-flash-latest", client: &http.Client{Timeout: time.Second}, baseURL: server.URL}
+	result, err := processor.Process(context.Background(), []byte("audio"), "audio/wav")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Transcript != "今天喝了一杯茶。" || result.Summary != result.Transcript {
+		t.Fatalf("unexpected transcript fallback: %+v", result)
+	}
+}
+
 func TestGeminiTTSUsesGenerateContent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1beta/models/gemini-3.1-flash-tts-preview:generateContent" {

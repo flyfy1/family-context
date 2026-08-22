@@ -5,8 +5,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+	"unicode"
 )
 
 func TestGeminiCoreGenerateContentLive(t *testing.T) {
@@ -27,7 +29,7 @@ func TestGeminiCoreGenerateContentLive(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
-	t.Run("audio process", func(t *testing.T) {
+	t.Run("audio process Chinese", func(t *testing.T) {
 		if _, err := exec.LookPath("say"); err != nil {
 			t.Skip("macOS say command is required for the live speech fixture")
 		}
@@ -45,6 +47,34 @@ func TestGeminiCoreGenerateContentLive(t *testing.T) {
 		}
 		if result.Transcript == "" || result.Summary == "" {
 			t.Fatalf("incomplete audio result: %+v", result)
+		}
+		if !containsHan(result.Transcript) {
+			t.Fatalf("Chinese speech was not preserved as Chinese: %q", result.Transcript)
+		}
+	})
+
+	t.Run("audio process English", func(t *testing.T) {
+		if _, err := exec.LookPath("say"); err != nil {
+			t.Skip("macOS say command is required for the live speech fixture")
+		}
+		audioPath := filepath.Join(t.TempDir(), "family-daily-live-test-english.aiff")
+		if output, err := exec.Command("say", "-v", "Samantha", "-o", audioPath, "I had a cup of tea, and the weather is lovely. Test complete.").CombinedOutput(); err != nil {
+			t.Fatalf("create live speech fixture: %v: %s", err, output)
+		}
+		audio, err := os.ReadFile(audioPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		result, err := gemini.Process(ctx, audio, "audio/aiff")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Transcript == "" || result.Summary == "" {
+			t.Fatalf("incomplete audio result: %+v", result)
+		}
+		lowerTranscript := strings.ToLower(result.Transcript)
+		if !strings.Contains(lowerTranscript, "tea") || !strings.Contains(lowerTranscript, "weather") {
+			t.Fatalf("English speech was not faithfully preserved: %q", result.Transcript)
 		}
 	})
 
@@ -81,4 +111,13 @@ func TestGeminiCoreGenerateContentLive(t *testing.T) {
 			t.Fatalf("incomplete judgment: %+v", result)
 		}
 	})
+}
+
+func containsHan(value string) bool {
+	for _, r := range value {
+		if unicode.Is(unicode.Han, r) {
+			return true
+		}
+	}
+	return false
 }
