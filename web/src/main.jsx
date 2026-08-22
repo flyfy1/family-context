@@ -318,6 +318,30 @@ function FamilyMembers({ members }) {
   return <section className="rail-card"><div className="rail-title"><strong>家庭成员</strong><a href="#/settings">管理</a></div><div className="member-row">{members.map(member => <div key={member.id} title={member.name}><Avatar member={member} /><span>{member.name}</span></div>)}</div></section>;
 }
 
+const familyTreeLevels = [
+  { role: "elder", label: "长辈", empty: "等待长辈加入" },
+  { role: "member", label: "家人", empty: "等待家人加入" },
+  { role: "child", label: "孩子", empty: "等待孩子加入" },
+];
+
+function FamilyTree({ members }) {
+  return <div className="family-tree" aria-label="家庭成员树">
+    {familyTreeLevels.map(level => {
+      const levelMembers = members.filter(member => member.role === level.role);
+      return <section className={`tree-generation tree-generation-${level.role}`} key={level.role} aria-label={level.label}>
+        <span className="tree-generation-label">{level.label}</span>
+        <div className="tree-nodes">
+          {levelMembers.length ? levelMembers.map(member => <article className="tree-node" key={member.id}>
+            <Avatar member={member} />
+            <strong>{member.name}</strong>
+            <span>{level.label} · 独立 Space</span>
+          </article>) : <div className="tree-node tree-node-empty"><span>＋</span><strong>{level.empty}</strong></div>}
+        </div>
+      </section>;
+    })}
+  </div>;
+}
+
 function PrivacyCard() { return <section className="privacy-card"><span>⌂</span><div><strong>本地优先</strong><p>成员 Space、原始录音、摘要和历史保存在家庭服务器。语音会发送给 Gemini 做一次性整理。</p></div></section>; }
 
 function Settings({ api, config, setConfig, members, refresh, notify }) {
@@ -341,7 +365,7 @@ function Settings({ api, config, setConfig, members, refresh, notify }) {
   }
   return <div className="settings-page">
     <section className="settings-section card"><div><p className="eyebrow">BROWSER CONFIG</p><h2>连接设置</h2><p className="muted-copy">前端可以部署到 GitHub Pages；API 地址指向实际运行的 Go 后端。</p></div><form className="settings-form" onSubmit={saveConnection}><label>家庭名称<input value={form.familyName} onChange={event => setForm({ ...form, familyName: event.target.value })} required /></label><label>后端 API 地址<input value={form.apiBase} onChange={event => setForm({ ...form, apiBase: event.target.value })} placeholder="本地留空；远程填写 https://api.example.com" /></label><label>家庭访问令牌<input type="password" value={form.token} onChange={event => setForm({ ...form, token: event.target.value })} required /></label><button className="primary-button">保存连接</button></form></section>
-    <section className="settings-section card"><div><p className="eyebrow">MEMBER SPACES</p><h2>家庭成员</h2><p className="muted-copy">每位成员会获得独立的本地文件目录。老人角色可以使用专用的大按钮页面；孩子角色可用于后续的专属配置。</p></div><div><div className="member-list">{members.map(member => <div className="member-list-item" key={member.id}><Avatar member={member} /><div><strong>{member.name}</strong><span>{member.role === "elder" ? "老人模式" : member.role === "child" ? "孩子" : "家庭成员"} · 独立 Space</span></div><code>{member.id.slice(0, 8)}</code></div>)}</div><form className="add-member" onSubmit={addMember}><input value={newMember.name} maxLength="30" onChange={event => setNewMember({ ...newMember, name: event.target.value })} placeholder="成员称呼" required /><select value={newMember.role} onChange={event => setNewMember({ ...newMember, role: event.target.value })}><option value="member">普通成员</option><option value="elder">老人</option><option value="child">孩子</option></select><div className="color-picker">{colors.map(color => <button type="button" aria-label={`选择颜色 ${color}`} key={color} className={newMember.color === color ? "active" : ""} style={{ background: color }} onClick={() => setNewMember({ ...newMember, color })} />)}</div><button className="primary-button" disabled={busy}>{busy ? "正在创建…" : "+ 添加成员"}</button></form></div></section>
+    <section className="settings-section family-tree-section card"><div><p className="eyebrow">FAMILY TREE</p><h2>家庭成员</h2><p className="muted-copy">成员会按长辈、家人和孩子自动成为树上的节点。新增成员后，无需手动调整布局。</p></div><div><FamilyTree members={members} /><form className="add-member" onSubmit={addMember}><input value={newMember.name} maxLength="30" onChange={event => setNewMember({ ...newMember, name: event.target.value })} placeholder="成员称呼" required /><select value={newMember.role} onChange={event => setNewMember({ ...newMember, role: event.target.value })}><option value="member">普通成员</option><option value="elder">老人</option><option value="child">孩子</option></select><div className="color-picker">{colors.map(color => <button type="button" aria-label={`选择颜色 ${color}`} key={color} className={newMember.color === color ? "active" : ""} style={{ background: color }} onClick={() => setNewMember({ ...newMember, color })} />)}</div><button className="primary-button" disabled={busy}>{busy ? "正在创建…" : "+ 添加成员"}</button></form></div></section>
     <section className="future-boundary"><strong>下一阶段边界</strong><p>MCP、成员定时分析任务和家庭摄像头/NAS 数据源会建立在这些独立 Space 上。当前 PoC 不开放任意文件系统访问，也不自动读取监控录像。</p></section>
   </div>;
 }

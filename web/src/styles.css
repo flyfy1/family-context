@@ -153,10 +153,22 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
 .settings-form input, .add-member input, .add-member select { width: 100%; min-height: 43px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; outline: 0; color: var(--ink); background: #faf6f0; }
 .settings-form input:focus, .add-member input:focus { border-color: var(--rust); box-shadow: 0 0 0 4px rgba(173,76,52,.08); }
 .settings-form .primary-button { justify-self: end; }
-.member-list { display: grid; gap: 9px; margin-bottom: 18px; }
-.member-list-item { display: flex; align-items: center; gap: 11px; padding: 11px; border: 1px solid var(--line); border-radius: 12px; }
-.member-list-item > div { flex: 1; display: grid; gap: 3px; }
-.member-list-item strong { font-size: 13px; }.member-list-item span { color: var(--muted); font-size: 10px; }.member-list-item code { color: var(--muted); font-size: 9px; }
+.family-tree { padding: 20px 18px 24px; overflow: hidden; border: 1px solid var(--line); border-radius: 18px; background: linear-gradient(180deg, rgba(244,238,230,.55), rgba(255,253,249,.35)); }
+.tree-generation { position: relative; display: grid; justify-items: center; }
+.tree-generation + .tree-generation { margin-top: 32px; }
+.tree-generation + .tree-generation::before { content: ""; position: absolute; top: -33px; left: 50%; width: 2px; height: 34px; background: rgba(97,114,105,.28); transform: translateX(-50%); }
+.tree-generation-label { position: relative; z-index: 2; padding: 5px 11px; border: 1px solid rgba(97,114,105,.18); border-radius: 99px; color: var(--sage); background: #f6f2eb; font-size: 9px; font-weight: 850; letter-spacing: .12em; }
+.tree-nodes { position: relative; width: 100%; display: flex; justify-content: center; align-items: stretch; gap: 12px; padding-top: 22px; }
+.tree-nodes::before { content: ""; position: absolute; top: 11px; left: 10%; right: 10%; height: 1px; background: rgba(97,114,105,.28); }
+.tree-node { position: relative; z-index: 1; min-width: 112px; max-width: 145px; flex: 1 1 112px; display: grid; justify-items: center; align-content: center; gap: 6px; min-height: 105px; padding: 14px 10px 12px; border: 1px solid rgba(62,48,40,.1); border-radius: 15px; background: var(--card); box-shadow: 0 8px 20px rgba(72,52,41,.07); text-align: center; }
+.tree-node::before { content: ""; position: absolute; top: -12px; left: 50%; width: 1px; height: 12px; background: rgba(97,114,105,.28); }
+.tree-node strong { font-size: 13px; }
+.tree-node > span:last-child { color: var(--muted); font-size: 9px; }
+.tree-generation-child .tree-node { background: #fff9ef; }
+.tree-generation-elder .tree-node { background: #f7f8f4; }
+.tree-node-empty { border-style: dashed; color: var(--muted); background: rgba(255,255,255,.35) !important; box-shadow: none; }
+.tree-node-empty > span { width: 30px; height: 30px; display: grid; place-items: center; border: 1px dashed rgba(97,114,105,.35); border-radius: 50%; color: var(--sage); font-size: 17px; }
+.tree-node-empty strong { font-size: 10px; font-weight: 650; }
 .add-member { display: grid; grid-template-columns: 1.1fr .8fr; gap: 9px; padding-top: 18px; border-top: 1px solid var(--line); }
 .color-picker { display: flex; align-items: center; gap: 7px; }
 .color-picker button { width: 23px; height: 23px; padding: 0; border: 3px solid var(--card); border-radius: 50%; box-shadow: 0 0 0 1px var(--line); }
@@ -204,7 +216,7 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
   .space-hero { align-items: flex-start; flex-wrap: wrap; padding: 24px; }.space-hero .avatar { width: 58px; height: 58px; }.space-stats { width: 100%; margin: 0; padding: 16px 0 0; border: 0; border-top: 1px solid var(--line); }
   .space-toolbar { align-items: flex-start; flex-direction: column; }.filter-pills { margin-top: 0; }
   .record-orb { width: 190px; height: 190px; }
-  .settings-section { grid-template-columns: 1fr; gap: 22px; padding: 22px; }.add-member { grid-template-columns: 1fr; }.add-member .primary-button, .settings-form .primary-button { width: 100%; }
+  .settings-section { grid-template-columns: 1fr; gap: 22px; padding: 22px; }.tree-nodes { justify-content: flex-start; overflow-x: auto; padding-bottom: 5px; }.tree-nodes::before { left: 56px; right: 56px; }.tree-node { min-width: 108px; }.add-member { grid-template-columns: 1fr; }.add-member .primary-button, .settings-form .primary-button { width: 100%; }
 }
 
 @media (max-width: 430px) {
