@@ -168,7 +168,7 @@ function LoginPage({ config, onSignedIn }) {
   return <main className="login-page"><section className="login-card card"><a href="#/" className="brand"><span>家</span><div>Family Daily<small>{config.familyName}</small></div></a><div><p className="eyebrow">MEMBER LOGIN</p><h1>{tx("Welcome home", "欢迎回家")}</h1><p className="muted-copy">{tx("Sign in with your own family username and password.", "请使用你自己的家庭用户名和密码登录。")}</p></div><form className="settings-form" onSubmit={submit}><label>{tx("Username", "用户名")}<input autoComplete="username" value={username} onChange={event => setUsername(event.target.value)} required /></label><label>{tx("Password", "密码")}<input type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} required /></label>{error && <p className="login-error" role="alert">{error}</p>}<button className="primary-button" disabled={busy}>{busy ? tx("Signing in…", "正在登录…") : tx("Sign in", "登录")}</button></form></section></main>;
 }
 
-function FamilyFeed({ api, members, currentMember, notify, refreshKey }) {
+function FamilyFeed({ api, members, currentMember, notify, refreshKey, refresh }) {
   const { language, tx } = useLanguage();
   const [updates, setUpdates] = useState([]);
   const [summary, setSummary] = useState(null);
@@ -178,11 +178,19 @@ function FamilyFeed({ api, members, currentMember, notify, refreshKey }) {
     api(`/api/v1/daily-summaries/latest?language=${language}`).then(data => setSummary(data.summary)),
   ]).finally(() => setLoading(false));
   useEffect(() => { reload().catch(error => notify(error.message)); }, [refreshKey, api]);
-	const attentionMembers = members.filter(member => member.needsAttention);
+  const attentionMembers = members.filter(member => member.role === "elder" && member.needsAttention);
+
+  async function dismissAttention(member) {
+    try {
+      await api(`/api/v1/me/members/${encodeURIComponent(member.id)}/attention/dismiss`, { method: "POST" });
+      notify(tx(`${member.name} no longer needs attention`, `已取消对${member.name}的关注状态`));
+      refresh();
+    } catch (error) { notify(error.message); }
+  }
 
   return <div className="page-grid feed-layout">
     <section>
-	  {attentionMembers.length > 0 && <AttentionBanner members={attentionMembers} />}
+      {attentionMembers.length > 0 && <AttentionBanner members={attentionMembers} onDismiss={dismissAttention} />}
       <Composer api={api} currentMember={currentMember} notify={notify} onCreated={reload} />
       <SectionHeading eyebrow="SHARED CONTEXT" title={tx("What the family is sharing", "一家人的近况")} count={updates.length} />
       {loading ? <CardSkeleton /> : updates.length ? <div className="update-list">{updates.map(update => <UpdateCard key={update.id} update={update} member={members.find(item => item.id === update.memberId)} api={api} notify={notify} />)}</div> : <EmptyState icon="✦" title={tx("The family feed is empty", "家庭动态还是空的")} text={tx("Share the first family update and let everyone know how your day is going.", "发布第一条家庭可见 Update，让大家知道你今天过得怎么样。")} />}
@@ -195,10 +203,15 @@ function FamilyFeed({ api, members, currentMember, notify, refreshKey }) {
   </div>;
 }
 
-function AttentionBanner({ members }) {
+function AttentionBanner({ members, onDismiss }) {
   const { tx } = useLanguage();
-  const names = members.map(member => member.name).join(tx(", ", "、"));
-  return <section className="attention-banner" role="status"><span aria-hidden="true">!</span><div><strong>{tx("Needs attention", "需要关注")}</strong><p>{tx(`${names} may need a check-in after a period without activity.`, `${names} 最近没有活动，值得主动联系一下。`)}</p></div></section>;
+  const [busyID, setBusyID] = useState("");
+  async function dismiss(member) {
+    setBusyID(member.id);
+    try { await onDismiss(member); }
+    finally { setBusyID(""); }
+  }
+  return <section className="attention-banner" role="status"><span aria-hidden="true">!</span><div className="attention-content"><strong>{tx("Needs attention", "需要关注")}</strong><p>{tx("These elders have had no recent activity. Check in, then clear the status with one tap.", "以下老人最近没有活动；联系确认后，可以点击一次取消状态。")}</p><div className="attention-members">{members.map(member => <div key={member.id}><b>{member.name}</b><button type="button" disabled={busyID === member.id} onClick={() => dismiss(member)}>{busyID === member.id ? tx("Clearing…", "取消中……") : tx("Checked in · Clear", "已联系 · 取消关注")}</button></div>)}</div></div></section>;
 }
 
 function Composer({ api, currentMember, notify, onCreated }) {
@@ -611,7 +624,7 @@ function DailyCard({ api, summary, onGenerated, notify }) {
 
 function FamilyMembers({ members }) {
   const { tx } = useLanguage();
-  return <section className="rail-card"><div className="rail-title"><strong>{tx("Family members", "家庭成员")}</strong><a href="#/settings">{tx("Manage", "管理")}</a></div><div className="member-row">{members.map(member => <div className={member.needsAttention ? "needs-attention" : ""} key={member.id} title={member.name}><Avatar member={member} /><span>{member.name}</span>{member.needsAttention && <small className="attention-badge">{tx("Attention", "需关注")}</small>}</div>)}</div></section>;
+  return <section className="rail-card"><div className="rail-title"><strong>{tx("Family members", "家庭成员")}</strong><a href="#/settings">{tx("Manage", "管理")}</a></div><div className="member-row">{members.map(member => { const needsAttention = member.role === "elder" && member.needsAttention; return <div className={needsAttention ? "needs-attention" : ""} key={member.id} title={member.name}><Avatar member={member} /><span>{member.name}</span>{needsAttention && <small className="attention-badge">{tx("Attention", "需关注")}</small>}</div>; })}</div></section>;
 }
 
 function FamilyTree({ members }) {

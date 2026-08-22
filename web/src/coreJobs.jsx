@@ -42,7 +42,7 @@ export function NotificationInbox({ api, currentMember, notify, refreshKey, lang
   return <section className="notification-inbox" aria-label="Family reminders">
     {notifications.slice(0, 3).map(notification => <article key={notification.id} className="notification-item">
       <span className="notification-icon">!</span>
-      <div><strong>{notification.title || notificationTitle(notification.type, language)}</strong><p>{notification.message}</p></div>
+      <div><strong>{language === "zh" ? (notification.title || notificationTitle(notification.type, language)) : (notification.titleEn || notificationTitle(notification.type, language))}</strong><p>{language === "zh" ? notification.message : (notification.messageEn || notification.message)}</p></div>
       <button type="button" onClick={() => acknowledge(notification)}>{text(language, "Got it", "知道了")}</button>
     </article>)}
   </section>;

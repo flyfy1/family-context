@@ -56,6 +56,11 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
 .attention-banner > span { flex: 0 0 auto; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; color: white; background: var(--rust); font-family: Georgia, serif; font-size: 18px; font-weight: 800; }
 .attention-banner strong { font-size: 13px; }
 .attention-banner p { margin: 3px 0 0; color: #785344; font-size: 11px; line-height: 1.5; }
+.attention-content { min-width: 0; flex: 1; }
+.attention-members { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+.attention-members > div { min-height: 34px; display: flex; align-items: center; gap: 8px; padding: 4px 5px 4px 10px; border: 1px solid rgba(173,76,52,.18); border-radius: 99px; background: rgba(255,255,255,.62); }
+.attention-members b { font-size: 11px; }
+.attention-members button { min-height: 25px; padding: 0 9px; border: 0; border-radius: 99px; color: white; background: var(--rust); font-size: 9px; font-weight: 800; }
 .card { background: var(--card); border: 1px solid rgba(255,255,255,.85); border-radius: 20px; box-shadow: var(--shadow); }
 .eyebrow { margin-bottom: 8px; color: var(--rust); font-family: Inter, sans-serif; font-size: 10px; font-weight: 850; letter-spacing: .16em; }
 .primary-button, .secondary-button { min-height: 44px; padding: 0 18px; border: 0; border-radius: 11px; font-weight: 780; transition: transform .15s, background .15s; }
