@@ -63,13 +63,25 @@ public class MainActivity extends android.app.Activity {
     private File recordingFile;
     private JSONObject pendingRecordQuestion;
     private String language;
+    private MemberProfileSettings.Profile profile;
+    private JSONArray familyMembers = new JSONArray();
+    private Button profileButton;
+    private LinearLayout storyContainer;
+    private TextView storyChildLabel;
+    private String storyChildID = "";
+    private TextView dailySummaryText;
+    private Button storyGenerateButton;
+    private Button pendingDailyRecordButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         language = LanguageSettings.get(this);
+        profile = MemberProfileSettings.get(this);
         setContentView(buildScreen());
-        loadFeed();
+        loadMembers();
+        if (MemberProfileSettings.ELDER.equals(profile.role)) loadDailySummary();
+        else if (!MemberProfileSettings.CHILD.equals(profile.role)) loadFeed();
         PhotoSync.schedule(this);
         refreshPhotoSyncStatus();
     }
@@ -104,10 +116,20 @@ public class MainActivity extends android.app.Activity {
 
         TextView eyebrow = text("FAMILY DAILY · V1", 13, COLOR_PRIMARY);
         root.addView(eyebrow);
-        TextView title = text(tr("Turn one caring question\ninto a conversation", "把一句关心，\n变成一次对话"), 30, COLOR_TEXT);
+        String titleText = MemberProfileSettings.ELDER.equals(profile.role)
+                ? tr("How was your day?", "今天过得怎么样？")
+                : MemberProfileSettings.CHILD.equals(profile.role)
+                ? tr("A story made from\nyour family's day", "把家里今天的事\n变成一个故事")
+                : tr("Turn one caring question\ninto a conversation", "把一句关心，\n变成一次对话");
+        TextView title = text(titleText, 30, COLOR_TEXT);
         title.setPadding(0, dp(8), 0, dp(8));
         root.addView(title);
-        TextView intro = text(tr("Ask Dad one specific question. He can answer by voice with a single tap.", "先问爸爸一个具体的问题。他只需要点一下按钮，就能用语音回答。"), 16, COLOR_MUTED);
+        String introText = MemberProfileSettings.ELDER.equals(profile.role)
+                ? tr("Tap once to share your day by voice, then listen to the family daily.", "点一下就能用语音说说今天，再听听家里的日报。")
+                : MemberProfileSettings.CHILD.equals(profile.role)
+                ? tr("A grown-up can make a bedtime story for you from moments the family shared.", "家人可以把大家分享的日常，变成一个讲给你的睡前故事。")
+                : tr("Ask Dad one specific question. He can answer by voice with a single tap.", "先问爸爸一个具体的问题。他只需要点一下按钮，就能用语音回答。");
+        TextView intro = text(introText, 16, COLOR_MUTED);
         intro.setLineSpacing(0, 1.25f);
         root.addView(intro);
 
@@ -117,6 +139,13 @@ public class MainActivity extends android.app.Activity {
         languageCardParams.setMargins(0, dp(24), 0, 0);
         root.addView(languageCard, languageCardParams);
         languageCard.addView(text(tr("Settings", "设置"), 20, COLOR_TEXT));
+        TextView profileIntro = text(tr("Current family profile", "当前家庭身份"), 13, COLOR_MUTED);
+        profileIntro.setPadding(0, dp(8), 0, dp(8));
+        languageCard.addView(profileIntro);
+        profileButton = secondaryButton(profileLabel(profile));
+        profileButton.setContentDescription(tr("Choose family profile", "选择家庭身份"));
+        profileButton.setOnClickListener(v -> showProfileSettings());
+        languageCard.addView(profileButton, fullWidth());
         TextView languageIntro = text(tr("Language", "语言"), 13, COLOR_MUTED);
         languageIntro.setPadding(0, dp(8), 0, dp(8));
         languageCard.addView(languageIntro);
@@ -124,6 +153,17 @@ public class MainActivity extends android.app.Activity {
         languageButton.setContentDescription(tr("Choose app language", "选择 App 语言"));
         languageButton.setOnClickListener(v -> showLanguageSettings());
         languageCard.addView(languageButton, fullWidth());
+
+        if (MemberProfileSettings.ELDER.equals(profile.role)) {
+            addElderMode(root);
+            addStatusArea(root);
+            return scroll;
+        }
+        if (MemberProfileSettings.CHILD.equals(profile.role)) {
+            addStoryCard(root);
+            addStatusArea(root);
+            return scroll;
+        }
 
         LinearLayout syncCard = card();
         syncCard.setPadding(dp(18), dp(18), dp(18), dp(18));
@@ -148,6 +188,8 @@ public class MainActivity extends android.app.Activity {
         photoSyncButton.setOnClickListener(v -> enableOrSyncPhotos());
         syncActions.addView(photoSyncButton, syncButtonParams);
         syncCard.addView(syncActions, fullWidth());
+
+        addStoryCard(root);
 
         LinearLayout askCard = card();
         askCard.setPadding(dp(18), dp(18), dp(18), dp(18));
@@ -180,21 +222,376 @@ public class MainActivity extends android.app.Activity {
         heading.addView(refresh);
         root.addView(heading, fullWidth());
 
+        addStatusArea(root);
+        return scroll;
+    }
+
+    private void addStatusArea(LinearLayout root) {
         progress = new ProgressBar(this);
         progress.setVisibility(View.GONE);
         LinearLayout.LayoutParams progressParams = new LinearLayout.LayoutParams(dp(28), dp(28));
         progressParams.gravity = Gravity.CENTER_HORIZONTAL;
         progressParams.setMargins(0, dp(16), 0, dp(8));
         root.addView(progress, progressParams);
-
-        status = text(tr("Connecting to the family Space…", "正在连接家庭空间……"), 14, COLOR_MUTED);
+        status = text("", 14, COLOR_MUTED);
         status.setGravity(Gravity.CENTER);
         status.setPadding(0, dp(12), 0, dp(4));
+        status.setVisibility(View.GONE);
         root.addView(status, fullWidth());
-
         feedContainer = vertical();
         root.addView(feedContainer, fullWidth());
-        return scroll;
+    }
+
+    private void addElderMode(LinearLayout root) {
+        LinearLayout voiceCard = card();
+        voiceCard.setPadding(dp(18), dp(22), dp(18), dp(22));
+        LinearLayout.LayoutParams params = fullWidth();
+        params.setMargins(0, dp(24), 0, 0);
+        root.addView(voiceCard, params);
+        voiceCard.addView(text(tr("Tell the family about today", "说说今天的事"), 22, COLOR_TEXT));
+        TextView help = text(tr("Your recording will be organized and shared with the family.", "录音会自动整理，并分享给家人。"), 15, COLOR_MUTED);
+        help.setPadding(0, dp(8), 0, dp(14));
+        voiceCard.addView(help);
+        Button record = primaryButton(tr("●  Start speaking", "●  开始说话"));
+        record.setMinHeight(dp(76));
+        record.setTextSize(20);
+        record.setOnClickListener(v -> beginDailyRecording(record));
+        voiceCard.addView(record, fullWidth());
+
+        LinearLayout dailyCard = card();
+        dailyCard.setPadding(dp(18), dp(22), dp(18), dp(22));
+        LinearLayout.LayoutParams dailyParams = fullWidth();
+        dailyParams.setMargins(0, dp(24), 0, 0);
+        root.addView(dailyCard, dailyParams);
+        dailyCard.addView(text(tr("Our family today", "我们家今天"), 22, COLOR_TEXT));
+        dailySummaryText = text(tr("Loading the family daily…", "正在读取家庭日报……"), 17, COLOR_MUTED);
+        dailySummaryText.setLineSpacing(0, 1.3f);
+        dailySummaryText.setPadding(0, dp(12), 0, dp(14));
+        dailyCard.addView(dailySummaryText);
+        Button refresh = secondaryButton(tr("Refresh family daily", "刷新家庭日报"));
+        refresh.setOnClickListener(v -> loadDailySummary());
+        dailyCard.addView(refresh, fullWidth());
+    }
+
+    private void addStoryCard(LinearLayout root) {
+        LinearLayout storyCard = card();
+        storyCard.setPadding(dp(18), dp(20), dp(18), dp(20));
+        LinearLayout.LayoutParams params = fullWidth();
+        params.setMargins(0, dp(24), 0, 0);
+        root.addView(storyCard, params);
+        storyCard.addView(text(tr("A bedtime story for a child", "给孩子的睡前故事"), 22, COLOR_TEXT));
+        TextView intro = text(tr("Any family member can make a story for a child from family-visible moments.", "任何家庭成员都可以把全家可见的日常，生成讲给孩子的故事。"), 14, COLOR_MUTED);
+        intro.setPadding(0, dp(8), 0, dp(12));
+        storyCard.addView(intro);
+        storyChildLabel = text(tr("Choose a child after family profiles load", "家庭身份加载后请选择孩子"), 14, COLOR_MUTED);
+        storyChildLabel.setPadding(0, 0, 0, dp(10));
+        storyCard.addView(storyChildLabel);
+        Button choose = secondaryButton(tr("Choose child", "选择孩子"));
+        choose.setOnClickListener(v -> showStoryChildChooser());
+        storyCard.addView(choose, fullWidth());
+        storyGenerateButton = primaryButton(tr("Generate story", "生成故事"));
+        storyGenerateButton.setEnabled(false);
+        LinearLayout.LayoutParams buttonParams = fullWidth();
+        buttonParams.setMargins(0, dp(10), 0, dp(10));
+        storyGenerateButton.setOnClickListener(v -> generateStory());
+        storyCard.addView(storyGenerateButton, buttonParams);
+        storyContainer = vertical();
+        storyCard.addView(storyContainer, fullWidth());
+    }
+
+    private void loadMembers() {
+        executor.execute(() -> {
+            try {
+                JSONArray members = new JSONObject(request("GET", "/api/v1/members", null)).getJSONArray("members");
+                JSONObject selected = null;
+                for (int i = 0; i < members.length(); i++) {
+                    JSONObject member = members.optJSONObject(i);
+                    if (member != null && member.optString("id").equals(profile.id)) selected = member;
+                }
+                if (selected == null && members.length() > 0) selected = members.optJSONObject(0);
+                JSONObject finalSelected = selected;
+                runOnUiThread(() -> {
+                    familyMembers = members;
+                    if (finalSelected != null && (!finalSelected.optString("id").equals(profile.id)
+                            || !finalSelected.optString("role").equals(profile.role)
+                            || !finalSelected.optString("name").equals(profile.name))) {
+                        MemberProfileSettings.set(this, finalSelected.optString("id"), finalSelected.optString("name"), finalSelected.optString("role"));
+                        recreate();
+                        return;
+                    }
+                    if (profileButton != null) profileButton.setText(profileLabel(profile));
+                    selectDefaultStoryChild();
+                });
+            } catch (Exception error) {
+                showError(error);
+            }
+        });
+    }
+
+    private void showProfileSettings() {
+        if (recorder != null) {
+            Toast.makeText(this, tr("Finish the recording before switching profile", "请先结束录音，再切换身份"), Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (familyMembers.length() == 0) {
+            Toast.makeText(this, tr("Family profiles are still loading", "家庭身份仍在加载"), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String[] labels = new String[familyMembers.length()];
+        int selected = 0;
+        for (int i = 0; i < familyMembers.length(); i++) {
+            JSONObject member = familyMembers.optJSONObject(i);
+            labels[i] = member.optString("name") + " · " + roleLabel(member.optString("role"));
+            if (member.optString("id").equals(profile.id)) selected = i;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle(tr("Who is using this phone?", "谁正在使用这台手机？"))
+                .setSingleChoiceItems(labels, selected, (dialog, which) -> {
+                    JSONObject member = familyMembers.optJSONObject(which);
+                    if (member != null && !member.optString("id").equals(profile.id)) {
+                        MemberProfileSettings.set(this, member.optString("id"), member.optString("name"), member.optString("role"));
+                        dialog.dismiss();
+                        recreate();
+                    } else dialog.dismiss();
+                })
+                .setNegativeButton(tr("Cancel", "取消"), null)
+                .show();
+    }
+
+    private String profileLabel(MemberProfileSettings.Profile value) {
+        if (value == null || value.id.isEmpty()) return tr("Choose profile", "选择身份");
+        return value.name + " · " + roleLabel(value.role);
+    }
+
+    private String roleLabel(String role) {
+        if (MemberProfileSettings.ELDER.equals(role)) return tr("Elder mode", "老人模式");
+        if (MemberProfileSettings.CHILD.equals(role)) return tr("Child mode", "孩子模式");
+        return tr("Standard mode", "普通模式");
+    }
+
+    private void selectDefaultStoryChild() {
+        JSONObject selected = null;
+        for (int i = 0; i < familyMembers.length(); i++) {
+            JSONObject member = familyMembers.optJSONObject(i);
+            if (member != null && MemberProfileSettings.CHILD.equals(member.optString("role"))) {
+                if (member.optString("id").equals(storyChildID) || member.optString("id").equals(profile.id)) {
+                    selected = member;
+                    break;
+                }
+                if (selected == null) selected = member;
+            }
+        }
+        if (selected == null) {
+            storyChildID = "";
+            if (storyChildLabel != null) storyChildLabel.setText(tr("No child profile is configured", "还没有配置孩子身份"));
+            if (storyGenerateButton != null) storyGenerateButton.setEnabled(false);
+            return;
+        }
+        storyChildID = selected.optString("id");
+        if (storyChildLabel != null) storyChildLabel.setText(tr("Story for ", "故事讲给：") + selected.optString("name"));
+        if (storyGenerateButton != null) storyGenerateButton.setEnabled(true);
+        loadStories();
+    }
+
+    private void showStoryChildChooser() {
+        JSONArray children = new JSONArray();
+        for (int i = 0; i < familyMembers.length(); i++) {
+            JSONObject member = familyMembers.optJSONObject(i);
+            if (member != null && MemberProfileSettings.CHILD.equals(member.optString("role"))) children.put(member);
+        }
+        if (children.length() == 0) {
+            Toast.makeText(this, tr("Ask the family administrator to mark a member as a child", "请让家庭管理员把成员标记为孩子"), Toast.LENGTH_LONG).show();
+            return;
+        }
+        String[] labels = new String[children.length()];
+        int selected = 0;
+        for (int i = 0; i < children.length(); i++) {
+            JSONObject child = children.optJSONObject(i);
+            labels[i] = child.optString("name");
+            if (child.optString("id").equals(storyChildID)) selected = i;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle(tr("Choose a child", "选择孩子"))
+                .setSingleChoiceItems(labels, selected, (dialog, which) -> {
+                    storyChildID = children.optJSONObject(which).optString("id");
+                    dialog.dismiss();
+                    selectDefaultStoryChild();
+                })
+                .setNegativeButton(tr("Cancel", "取消"), null)
+                .show();
+    }
+
+    private void generateStory() {
+        if (storyChildID.isEmpty()) return;
+        storyGenerateButton.setEnabled(false);
+        storyGenerateButton.setText(tr("Generating story and audio…", "正在生成故事和音频……"));
+        executor.execute(() -> {
+            try {
+                JSONObject body = new JSONObject()
+                        .put("familyId", "our-family")
+                        .put("childId", storyChildID)
+                        .put("audienceAge", 6)
+                        .put("days", 7)
+                        .put("language", language);
+                JSONObject story = new JSONObject(request("POST", "/api/v1/bedtime-stories", body));
+                runOnUiThread(() -> {
+                    renderStory(story);
+                    storyGenerateButton.setEnabled(true);
+                    storyGenerateButton.setText(tr("Generate another story", "再生成一个故事"));
+                });
+            } catch (Exception error) {
+                runOnUiThread(() -> {
+                    storyGenerateButton.setEnabled(true);
+                    storyGenerateButton.setText(tr("Generate story", "生成故事"));
+                });
+                showError(error);
+            }
+        });
+    }
+
+    private void loadStories() {
+        if (storyContainer == null || storyChildID.isEmpty()) return;
+        executor.execute(() -> {
+            try {
+                JSONObject response = new JSONObject(request("GET", "/api/v1/bedtime-stories?childId=" + storyChildID + "&language=" + language, null));
+                JSONArray stories = response.optJSONArray("bedtimeStories");
+                JSONObject latest = stories != null && stories.length() > 0 ? stories.optJSONObject(0) : null;
+                runOnUiThread(() -> {
+                    if (latest == null) {
+                        storyContainer.removeAllViews();
+                        storyContainer.addView(text(tr("No story yet. Generate the first one.", "还没有故事，可以生成第一个。"), 14, COLOR_MUTED));
+                    } else renderStory(latest);
+                });
+            } catch (Exception error) {
+                showError(error);
+            }
+        });
+    }
+
+    private void renderStory(JSONObject story) {
+        if (storyContainer == null) return;
+        storyContainer.removeAllViews();
+        TextView title = text(story.optString("title"), 20, COLOR_TEXT);
+        title.setPadding(0, dp(10), 0, dp(8));
+        storyContainer.addView(title);
+        TextView content = text(story.optString("content"), 16, COLOR_TEXT);
+        content.setLineSpacing(0, 1.3f);
+        storyContainer.addView(content);
+        String audioURL = story.optString("audioUrl");
+        if (!audioURL.isEmpty()) {
+            Button play = secondaryButton(tr("▶  Play bedtime story", "▶  播放睡前故事"));
+            LinearLayout.LayoutParams params = fullWidth();
+            params.setMargins(0, dp(12), 0, 0);
+            play.setOnClickListener(v -> playAudio(
+                    audioURL,
+                    play,
+                    tr("▶  Play bedtime story", "▶  播放睡前故事")
+            ));
+            storyContainer.addView(play, params);
+        } else {
+            TextView state = text(tr("The story text is ready; audio is still unavailable.", "故事文字已经准备好，音频暂时不可用。"), 13, COLOR_MUTED);
+            state.setPadding(0, dp(10), 0, 0);
+            storyContainer.addView(state);
+        }
+    }
+
+    private void loadDailySummary() {
+        executor.execute(() -> {
+            try {
+                JSONObject response = new JSONObject(request("GET", "/api/v1/daily-summaries/latest?language=" + language, null));
+                JSONObject summary = response.optJSONObject("summary");
+                runOnUiThread(() -> {
+                    if (dailySummaryText != null) dailySummaryText.setText(summary == null
+                            ? tr("Today's family daily has not been generated yet.", "今天的家庭日报还没有生成。")
+                            : summary.optString("content"));
+                });
+            } catch (Exception error) {
+                showError(error);
+            }
+        });
+    }
+
+    private void beginDailyRecording(Button button) {
+        if (profile.id.isEmpty()) {
+            Toast.makeText(this, tr("Choose a family profile first", "请先选择家庭身份"), Toast.LENGTH_LONG).show();
+            return;
+        }
+        pendingDailyRecordButton = button;
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, RECORD_AUDIO_REQUEST);
+            return;
+        }
+        startDailyRecording(button);
+    }
+
+    private void startDailyRecording(Button button) {
+        try {
+            recordingFile = new File(getCacheDir(), "daily-" + UUID.randomUUID() + ".m4a");
+            recorder = Build.VERSION.SDK_INT >= 31 ? new MediaRecorder(this) : new MediaRecorder();
+            recorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+            recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+            recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
+            recorder.setAudioEncodingBitRate(64_000);
+            recorder.setAudioSamplingRate(44_100);
+            recorder.setOutputFile(recordingFile.getAbsolutePath());
+            recorder.prepare();
+            recorder.start();
+            button.setText(tr("■  Stop and share", "■  结束并分享"));
+            button.setOnClickListener(v -> stopAndUploadDaily(button));
+            Toast.makeText(this, tr("Recording — speak naturally", "正在录音，请自然地说话"), Toast.LENGTH_SHORT).show();
+        } catch (Exception error) {
+            releaseRecorder();
+            Toast.makeText(this, tr("Unable to start recording", "暂时无法开始录音"), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void stopAndUploadDaily(Button button) {
+        try {
+            recorder.stop();
+        } catch (RuntimeException tooShort) {
+            releaseRecorder();
+            if (recordingFile != null) recordingFile.delete();
+            button.setText(tr("●  Start speaking", "●  开始说话"));
+            button.setOnClickListener(v -> beginDailyRecording(button));
+            Toast.makeText(this, tr("The recording was too short. Please try again.", "录音太短，请再说一次"), Toast.LENGTH_LONG).show();
+            return;
+        }
+        releaseRecorder();
+        File file = recordingFile;
+        setBusy(true, tr("Organizing and sharing your update…", "正在整理并分享你的近况……"));
+        executor.execute(() -> {
+            try {
+                uploadDailyVoice(file);
+                if (file != null) file.delete();
+                runOnUiThread(() -> {
+                    button.setText(tr("●  Share another update", "●  再说一条"));
+                    button.setOnClickListener(v -> beginDailyRecording(button));
+                    setBusy(false, tr("Your update was shared with the family", "你的近况已经分享给家人"));
+                });
+            } catch (Exception error) {
+                showError(error);
+            }
+        });
+    }
+
+    private void uploadDailyVoice(File audio) throws Exception {
+        String boundary = "FamilyDaily-" + UUID.randomUUID();
+        HttpURLConnection connection = openConnection("POST", "/api/v1/updates/voice");
+        connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+        connection.setDoOutput(true);
+        try (OutputStream output = new BufferedOutputStream(connection.getOutputStream())) {
+            writeUtf8(output, "--" + boundary + "\r\nContent-Disposition: form-data; name=\"familyId\"\r\n\r\nour-family\r\n");
+            writeUtf8(output, "--" + boundary + "\r\nContent-Disposition: form-data; name=\"memberId\"\r\n\r\n" + profile.id + "\r\n");
+            writeUtf8(output, "--" + boundary + "\r\nContent-Disposition: form-data; name=\"visibility\"\r\n\r\nfamily\r\n");
+            writeUtf8(output, "--" + boundary + "\r\nContent-Disposition: form-data; name=\"audio\"; filename=\"daily.m4a\"\r\nContent-Type: audio/mp4\r\n\r\n");
+            try (InputStream input = new BufferedInputStream(new FileInputStream(audio))) {
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = input.read(buffer)) != -1) output.write(buffer, 0, read);
+            }
+            writeUtf8(output, "\r\n--" + boundary + "--\r\n");
+        }
+        readResponse(connection);
     }
 
     private void createQuestion() {
@@ -286,7 +683,11 @@ public class MainActivity extends android.app.Activity {
         card.addView(summary);
 
         Button play = secondaryButton(tr("▶  Play original", "▶  播放原声"));
-        play.setOnClickListener(v -> playAudio(answer.optString("audioUrl"), play));
+        play.setOnClickListener(v -> playAudio(
+                answer.optString("audioUrl"),
+                play,
+                tr("▶  Play original", "▶  播放原声")
+        ));
         card.addView(play, fullWidth());
 
         if ("ready".equals(answerStatus)) {
@@ -370,7 +771,11 @@ public class MainActivity extends android.app.Activity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == RECORD_AUDIO_REQUEST && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED && pendingRecordQuestion != null) {
+        if (requestCode == RECORD_AUDIO_REQUEST && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED && pendingDailyRecordButton != null) {
+            Button button = pendingDailyRecordButton;
+            pendingDailyRecordButton = null;
+            startDailyRecording(button);
+        } else if (requestCode == RECORD_AUDIO_REQUEST && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED && pendingRecordQuestion != null) {
             loadFeed();
             Toast.makeText(this, tr("Microphone access is on. Tap the record button again.", "权限已开启，请再次点击录音按钮"), Toast.LENGTH_LONG).show();
         } else if (requestCode == RECORD_AUDIO_REQUEST) {
@@ -613,7 +1018,7 @@ public class MainActivity extends android.app.Activity {
         });
     }
 
-    private void playAudio(String path, Button button) {
+    private void playAudio(String path, Button button, String restingLabel) {
         button.setEnabled(false);
         button.setText(tr("Loading original audio…", "正在加载原声……"));
         MediaPlayer player = new MediaPlayer();
@@ -628,12 +1033,12 @@ public class MainActivity extends android.app.Activity {
             player.setOnCompletionListener(mediaPlayer -> {
                 mediaPlayer.release();
                 button.setEnabled(true);
-                button.setText(tr("▶  Play original", "▶  播放原声"));
+                button.setText(restingLabel);
             });
             player.setOnErrorListener((mediaPlayer, what, extra) -> {
                 mediaPlayer.release();
                 button.setEnabled(true);
-                button.setText(tr("▶  Play original", "▶  播放原声"));
+                button.setText(restingLabel);
                 Toast.makeText(this, tr("Unable to play the original audio", "暂时无法播放原声"), Toast.LENGTH_LONG).show();
                 return true;
             });
@@ -641,7 +1046,7 @@ public class MainActivity extends android.app.Activity {
         } catch (Exception error) {
             player.release();
             button.setEnabled(true);
-            button.setText(tr("▶  Play original", "▶  播放原声"));
+            button.setText(restingLabel);
             Toast.makeText(this, tr("Unable to play the original audio", "暂时无法播放原声"), Toast.LENGTH_LONG).show();
         }
     }
@@ -662,7 +1067,7 @@ public class MainActivity extends android.app.Activity {
         HttpURLConnection connection = (HttpURLConnection) new URL(BuildConfig.API_BASE_URL + path).openConnection();
         connection.setRequestMethod(method);
         connection.setConnectTimeout(10_000);
-        connection.setReadTimeout(90_000);
+        connection.setReadTimeout(180_000);
         connection.setRequestProperty("Accept", "application/json");
         connection.setRequestProperty("Accept-Language", language);
         connection.setRequestProperty("X-Family-Token", BuildConfig.FAMILY_API_TOKEN);

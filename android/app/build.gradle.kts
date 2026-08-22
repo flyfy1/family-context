@@ -2,6 +2,8 @@ plugins {
     id("com.android.application")
 }
 
+val familyApiBaseUrl = providers.gradleProperty("FAMILY_API_BASE_URL").orElse("http://10.0.2.2:8080")
+
 android {
     namespace = "life.integ.familydaily"
     compileSdk = 37
@@ -13,7 +15,7 @@ android {
         versionCode = 2
         versionName = "0.2.0"
 
-        buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8080\"")
+        buildConfigField("String", "API_BASE_URL", "\"${familyApiBaseUrl.get()}\"")
         buildConfigField("String", "FAMILY_API_TOKEN", "\"family-daily-local\"")
     }
 
