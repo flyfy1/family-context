@@ -43,6 +43,9 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
 .topbar h1 { margin: 3px 0 0; font-size: 31px; font-weight: 600; }
 .topbar p { margin: 0; color: var(--muted); font-size: 12px; }
 .topbar-actions { display: flex; align-items: end; gap: 10px; }
+.signed-in-member { display: grid; gap: 3px; padding: 0 6px; }
+.signed-in-member span { color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.signed-in-member strong { font-size: 12px; }
 .member-switcher, .language-switcher { display: grid; gap: 5px; color: var(--muted); font-size: 10px; letter-spacing: .08em; }
 .member-switcher { min-width: 190px; }
 .language-switcher { min-width: 105px; }
@@ -225,7 +228,7 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
 .settings-section .muted-copy { font-size: 12px; }
 .settings-form { display: grid; gap: 14px; }
 .settings-form label { display: grid; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 700; }
-.settings-form input, .add-member input, .add-member select { width: 100%; min-height: 43px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; outline: 0; color: var(--ink); background: #faf6f0; }
+.settings-form input, .settings-form select, .add-member input, .add-member select { width: 100%; min-height: 43px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; outline: 0; color: var(--ink); background: #faf6f0; }
 .settings-form input:focus, .add-member input:focus { border-color: var(--rust); box-shadow: 0 0 0 4px rgba(173,76,52,.08); }
 .settings-form .primary-button { justify-self: end; }
 .family-tree { padding: 20px 18px 24px; overflow: hidden; border: 1px solid var(--line); border-radius: 18px; background: linear-gradient(180deg, rgba(244,238,230,.55), rgba(255,253,249,.35)); }
@@ -311,6 +314,11 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
 .onboarding { min-height: calc(100vh - 190px); display: grid; place-content: center; justify-items: center; text-align: center; }
 .onboarding-mark { width: 76px; height: 76px; display: grid; place-items: center; margin-bottom: 22px; border-radius: 50%; color: white; background: var(--rust); font-family: Georgia, serif; font-size: 30px; }
 .onboarding h2 { margin-bottom: 10px; font-size: 37px; }.onboarding > p:not(.eyebrow) { max-width: 430px; color: var(--muted); line-height: 1.7; }.onboarding button { margin-top: 13px; }
+.login-page { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: radial-gradient(circle at 90% 0%, #fff8ee 0, transparent 34%), var(--paper); }
+.login-card { width: min(460px, 100%); display: grid; gap: 28px; padding: 34px; }
+.login-card .brand { position: static; width: fit-content; }
+.login-card h1 { margin-bottom: 8px; font-size: 38px; }
+.login-error { margin: 0; color: #8b2f1e; font-size: 12px; font-weight: 700; }
 .page-loading { min-height: 50vh; display: grid; place-content: center; justify-items: center; gap: 12px; color: var(--muted); font-size: 12px; }
 .page-loading i { width: 25px; height: 25px; border: 2px solid var(--paper-2); border-top-color: var(--rust); border-radius: 50%; animation: spin .8s linear infinite; }
 .skeleton { height: 220px; padding: 25px; }.skeleton i { display: block; width: 40%; height: 12px; margin-bottom: 18px; border-radius: 6px; background: #eee5dd; }.skeleton i:nth-child(2) { width: 80%; height: 20px; }.skeleton i:nth-child(3) { width: 65%; }

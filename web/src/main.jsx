@@ -17,8 +17,8 @@ function loadConfig() {
   return {
     familyName: localStorage.getItem("fd.familyName") || (language === "zh" ? "我们的家" : "Our Family"),
     apiBase: (localStorage.getItem("fd.apiBase") || DEFAULT_API_BASE).replace(/\/$/, ""),
-    token: localStorage.getItem("fd.token") || "family-daily-local",
-    adminToken: localStorage.getItem("fd.adminToken") || "",
+    sessionToken: localStorage.getItem("fd.sessionToken") || "",
+    adminToken: "",
     language,
   };
 }
@@ -38,7 +38,7 @@ function App() {
   const route = useHashRoute();
   const [config, setConfig] = useState(loadConfig);
   const [members, setMembers] = useState([]);
-  const [currentMemberId, setCurrentMemberId] = useState(localStorage.getItem("fd.currentMember") || "");
+  const [signedInMember, setSignedInMember] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
@@ -47,31 +47,23 @@ function App() {
   const api = useMemo(() => createAPI(config), [config]);
   const language = config.language;
   const tx = useMemo(() => (english, chinese) => language === "zh" ? chinese : english, [language]);
-  const currentMember = members.find(member => member.id === currentMemberId) || members[0] || null;
+  const currentMember = signedInMember;
 
   useEffect(() => {
-    if (route === "/") { setLoading(false); return; }
+    if (route === "/" || !config.sessionToken) { setLoading(false); return; }
     let active = true;
     setLoading(true);
-    api("/api/v1/members")
-      .then(data => {
+    Promise.all([api("/api/v1/me"), api("/api/v1/members")])
+      .then(([member, data]) => {
         if (!active) return;
+        setSignedInMember(member);
         setMembers(data.members || []);
         setError("");
       })
       .catch(err => active && setError(err.message))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
-  }, [api, refreshKey, route]);
-
-  useEffect(() => {
-    if (!currentMemberId && members[0]) setCurrentMemberId(members[0].id);
-    if (currentMemberId && !members.some(member => member.id === currentMemberId) && members[0]) setCurrentMemberId(members[0].id);
-  }, [members, currentMemberId]);
-
-  useEffect(() => {
-    if (currentMemberId) localStorage.setItem("fd.currentMember", currentMemberId);
-  }, [currentMemberId]);
+  }, [api, config.sessionToken, refreshKey, route]);
 
   useEffect(() => {
     localStorage.setItem("fd.language", language);
@@ -86,14 +78,29 @@ function App() {
 
   function refresh() { setRefreshKey(value => value + 1); }
 
+  function signedIn(credential) {
+    localStorage.setItem("fd.sessionToken", credential.accessToken);
+    setConfig(current => ({ ...current, sessionToken: credential.accessToken }));
+    setSignedInMember(credential.member);
+    location.hash = "/feed";
+  }
+
+  async function signOut() {
+    try { await api("/api/v1/auth/logout", { method: "POST" }); } catch {}
+    localStorage.removeItem("fd.sessionToken");
+    setConfig(current => ({ ...current, sessionToken: "", adminToken: "" }));
+    setSignedInMember(null); setMembers([]); setError("");
+  }
+
   const pageProps = { api, members, currentMember, notify, refreshKey, refresh };
 
   if (route === "/") return <LanguageContext.Provider value={{ language, tx }}><LandingPage language={language} onLanguageChange={next => setConfig(current => ({ ...current, language: next }))} /></LanguageContext.Provider>;
+  if (!config.sessionToken) return <LanguageContext.Provider value={{ language, tx }}><LoginPage config={config} onSignedIn={signedIn} /></LanguageContext.Provider>;
 
   return <LanguageContext.Provider value={{ language, tx }}><div className="app-shell">
     <Sidebar route={route} familyName={config.familyName} />
     <main className="main-shell">
-      <Topbar route={route} members={members} currentMember={currentMember} onMemberChange={setCurrentMemberId} language={language} onLanguageChange={next => setConfig(current => ({ ...current, language: next }))} />
+      <Topbar route={route} currentMember={currentMember} onSignOut={signOut} language={language} onLanguageChange={next => setConfig(current => ({ ...current, language: next }))} />
       {!error && <NotificationInbox api={api} currentMember={currentMember} notify={notify} refreshKey={refreshKey} />}
       {error && route !== "/settings" && <ConnectionError message={error} onSettings={() => { location.hash = "/settings"; }} />}
       {route === "/settings" && <Settings api={api} config={config} setConfig={setConfig} members={members} currentMember={currentMember} refresh={refresh} notify={notify} />}
@@ -130,13 +137,32 @@ function NavLink({ to, route, icon, children }) {
   return <a href={`#${to}`} className={route === to ? "active" : ""}><span className="nav-icon">{icon}</span>{children}</a>;
 }
 
-function Topbar({ route, members, currentMember, onMemberChange, language, onLanguageChange }) {
+function Topbar({ route, currentMember, onSignOut, language, onLanguageChange }) {
   const { tx } = useLanguage();
   const titles = { "/feed": [tx("Family feed", "家庭动态"), tx("See what everyone has been up to", "看看大家最近发生了什么")], "/space": [tx("My Space", "我的 Space"), tx("Your own private record space", "属于你的独立记录空间")], "/elder": [tx("Elder mode", "老人模式"), tx("Speak, then hear about the family's day", "说一说，听听家里的今天")], "/settings": [tx("Family settings", "家庭设置"), tx("Members and connection settings", "成员和连接配置")] };
   return <header className="topbar">
     <div><p>{titles[route][1]}</p><h1>{titles[route][0]}</h1></div>
-    <div className="topbar-actions"><label className="language-switcher"><span>{tx("Language", "语言")}</span><select aria-label={tx("Language", "语言")} value={language} onChange={event => onLanguageChange(event.target.value)}><option value="en">English</option><option value="zh">中文</option></select></label>{members.length > 0 && <label className="member-switcher"><span>{tx("Viewing as", "当前身份")}</span><select value={currentMember?.id || ""} onChange={event => onMemberChange(event.target.value)}>{members.map(member => <option key={member.id} value={member.id}>{member.name}{member.isAdmin ? tx(" · Administrator", " · 管理员") : member.role === "elder" ? tx(" · Elder", " · 老人") : member.role === "child" ? tx(" · Child", " · 孩子") : ""}</option>)}</select></label>}</div>
+    <div className="topbar-actions"><label className="language-switcher"><span>{tx("Language", "语言")}</span><select aria-label={tx("Language", "语言")} value={language} onChange={event => onLanguageChange(event.target.value)}><option value="en">English</option><option value="zh">中文</option></select></label>{currentMember && <div className="signed-in-member"><span>{tx("Signed in as", "当前登录")}</span><strong>{currentMember.name}{currentMember.isAdmin ? tx(" · Administrator", " · 管理员") : ""}</strong></div>}<button type="button" className="secondary-button" onClick={onSignOut}>{tx("Sign out", "退出")}</button></div>
   </header>;
+}
+
+function LoginPage({ config, onSignedIn }) {
+  const { tx } = useLanguage();
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function submit(event) {
+    event.preventDefault(); setBusy(true); setError("");
+    try {
+      const response = await fetch(`${config.apiBase}/api/v1/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password }) });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || tx("Unable to sign in", "无法登录"));
+      onSignedIn(body);
+    } catch (loginError) { setError(loginError.message); }
+    finally { setBusy(false); }
+  }
+  return <main className="login-page"><section className="login-card card"><a href="#/" className="brand"><span>家</span><div>Family Daily<small>{config.familyName}</small></div></a><div><p className="eyebrow">MEMBER LOGIN</p><h1>{tx("Welcome home", "欢迎回家")}</h1><p className="muted-copy">{tx("Sign in with your own family username and password.", "请使用你自己的家庭用户名和密码登录。")}</p></div><form className="settings-form" onSubmit={submit}><label>{tx("Username", "用户名")}<input autoComplete="username" value={username} onChange={event => setUsername(event.target.value)} required /></label><label>{tx("Password", "密码")}<input type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} required /></label>{error && <p className="login-error" role="alert">{error}</p>}<button className="primary-button" disabled={busy}>{busy ? tx("Signing in…", "正在登录…") : tx("Sign in", "登录")}</button></form></section></main>;
 }
 
 function FamilyFeed({ api, members, currentMember, notify, refreshKey }) {
@@ -496,8 +522,8 @@ function Settings({ api, config, setConfig, members, currentMember, refresh, not
   function saveConnection(event) {
     event.preventDefault();
     const next = { ...form, language: config.language, apiBase: form.apiBase.replace(/\/$/, "") };
-    localStorage.setItem("fd.familyName", next.familyName); localStorage.setItem("fd.apiBase", next.apiBase); localStorage.setItem("fd.token", next.token); localStorage.setItem("fd.adminToken", next.adminToken || "");
-    setConfig(next); notify(tx("Web settings saved in this browser", "网页配置已保存在当前浏览器"));
+    localStorage.setItem("fd.familyName", next.familyName); localStorage.setItem("fd.apiBase", next.apiBase);
+    setConfig(next); notify(tx("Connection saved; the administrator token stays only in this tab", "连接已保存；管理员令牌只保留在当前页面会话中"));
   }
   async function addMember(event) {
     event.preventDefault(); setBusy(true);
@@ -509,13 +535,31 @@ function Settings({ api, config, setConfig, members, currentMember, refresh, not
     finally { setBusy(false); }
   }
   return <div className="settings-page">
-    <section className="settings-section card"><div><p className="eyebrow">BROWSER CONFIG</p><h2>{tx("Connection", "连接设置")}</h2><p className="muted-copy">{tx("Administrator and family tokens are stored separately and are used only for member configuration.", "管理员令牌与家庭令牌分开保存，只用于成员配置操作。")}</p></div><form className="settings-form" onSubmit={saveConnection}><label>{tx("Family name", "家庭名称")}<input value={form.familyName} onChange={event => setForm({ ...form, familyName: event.target.value })} required /></label><label>{tx("Backend API address", "后端 API 地址")}<input value={form.apiBase} onChange={event => setForm({ ...form, apiBase: event.target.value })} placeholder={tx("Leave blank locally; use https://api.example.com remotely", "本地留空；远程填写 https://api.example.com")} /></label><label>{tx("Family access token", "家庭访问令牌")}<input type="password" value={form.token} onChange={event => setForm({ ...form, token: event.target.value })} required /></label><label>{tx("Administrator token", "管理员令牌")}<input type="password" value={form.adminToken} onChange={event => setForm({ ...form, adminToken: event.target.value })} placeholder={tx("Required only for administrators", "仅管理员需要填写")} /></label><button className="primary-button">{tx("Save connection", "保存连接")}</button></form></section>
+    <section className="settings-section card"><div><p className="eyebrow">BROWSER CONFIG</p><h2>{tx("Connection", "连接设置")}</h2><p className="muted-copy">{tx("Your member login identifies you. Administrators enter the separate administrator token only when managing the family; it is not saved by this page.", "成员登录用于确认你的身份。管理员只在管理家庭时填写独立管理员令牌，本页面不会保存它。")}</p></div><form className="settings-form" onSubmit={saveConnection}><label>{tx("Family name", "家庭名称")}<input value={form.familyName} onChange={event => setForm({ ...form, familyName: event.target.value })} required /></label><label>{tx("Backend API address", "后端 API 地址")}<input value={form.apiBase} onChange={event => setForm({ ...form, apiBase: event.target.value })} placeholder={tx("Leave blank locally; use https://api.example.com remotely", "本地留空；远程填写 https://api.example.com")} /></label><label>{tx("Administrator token", "管理员令牌")}<input type="password" autoComplete="off" value={form.adminToken} onChange={event => setForm({ ...form, adminToken: event.target.value })} placeholder={tx("Enter when you need administrator actions", "需要管理操作时填写")} /></label><button className="primary-button">{tx("Use connection", "使用此连接")}</button></form></section>
     <section className="settings-section family-tree-section card"><div><p className="eyebrow">FAMILY TREE</p><h2>{tx("Family members", "家庭成员")}</h2><p className="muted-copy">{tx("Administrators have a dedicated badge. Both an administrator identity and administrator token are required to configure members.", "管理员会显示专属标记。只有管理员身份和管理员令牌同时就绪，才能进入成员配置。")}</p></div><div><FamilyTree members={members} />{canManageMembers ? <form className="add-member" onSubmit={addMember}><input value={newMember.name} maxLength="30" onChange={event => setNewMember({ ...newMember, name: event.target.value })} placeholder={tx("Member name", "成员称呼")} required /><select value={newMember.role} onChange={event => setNewMember({ ...newMember, role: event.target.value })}><option value="member">{tx("Family member", "普通成员")}</option><option value="elder">{tx("Elder", "老人")}</option><option value="child">{tx("Child", "孩子")}</option></select><label className="admin-option"><input type="checkbox" checked={newMember.isAdmin} onChange={event => setNewMember({ ...newMember, isAdmin: event.target.checked })} />{tx("Make administrator", "设为管理员")}</label><div className="color-picker">{colors.map(color => <button type="button" aria-label={tx(`Choose color ${color}`, `选择颜色 ${color}`)} key={color} className={newMember.color === color ? "active" : ""} style={{ background: color }} onClick={() => setNewMember({ ...newMember, color })} />)}</div><button className="primary-button" disabled={busy}>{busy ? tx("Creating…", "正在创建…") : tx("+ Add member", "+ 添加成员")}</button></form> : <div className="admin-gate"><strong>{currentMember?.isAdmin ? tx("Administrator token still required", "还需要管理员令牌") : tx("Only administrators can configure members", "只有管理员可以配置成员")}</strong><p>{currentMember?.isAdmin ? tx("Enter the separate administrator token in Connection above.", "请在上方连接设置中填写独立的管理员令牌。") : tx("Switch to a family member with the Administrator badge to reveal member configuration.", "切换到带有“管理员”标记的家庭成员后，才会显示成员配置。")}</p></div>}</div></section>
+    {canManageMembers && <MemberLoginSettings api={api} members={members} notify={notify} />}
     {currentMember && <SharePolicySettings api={api} member={currentMember} notify={notify} />}
     {currentMember && <MCPSessionSettings api={api} config={config} member={currentMember} notify={notify} />}
-    <CoreJobSettings apiBase={config.apiBase} familyToken={config.token} language={config.language} members={members} notify={notify} refresh={refresh} />
+    <CoreJobSettings apiBase={config.apiBase} language={config.language} members={members} notify={notify} refresh={refresh} />
     <section className="future-boundary"><strong>{tx("Safety boundary", "安全边界")}</strong><p>{tx("ChatGPT OAuth and Claude Code remain limited to the selected member's own Space/context and family-visible updates. Other members' private content, arbitrary filesystem access, and surveillance footage are never exposed.", "ChatGPT OAuth 和 Claude Code 始终限制在当前成员自己的 Space/context 与全家可见动态。其他成员的私密内容、任意文件系统访问和监控录像都不会被开放。")}</p></section>
   </div>;
+}
+
+function MemberLoginSettings({ api, members, notify }) {
+  const { tx } = useLanguage();
+  const [memberID, setMemberID] = useState(members[0]?.id || "");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function save(event) {
+    event.preventDefault(); setBusy(true);
+    try {
+      await api(`/api/v1/admin/members/${encodeURIComponent(memberID)}/login`, { admin: true, method: "PUT", body: JSON.stringify({ username, password }) });
+      setPassword(""); notify(tx("Member login saved; previous web sessions were signed out", "成员登录信息已保存，旧的网页登录会话已退出"));
+    } catch (error) { notify(error.message); }
+    finally { setBusy(false); }
+  }
+  return <section className="settings-section card"><div><p className="eyebrow">MEMBER LOGIN</p><h2>{tx("Member usernames and passwords", "成员用户名与密码")}</h2><p className="muted-copy">{tx("Set or reset one member login at a time. Passwords are never shown again, and resetting signs that member out on the web.", "每次设置或重置一个成员账号。密码不会再次显示；重置后该成员的网页登录会话会全部退出。")}</p></div><form className="settings-form" onSubmit={save}><label>{tx("Member", "成员")}<select value={memberID} onChange={event => setMemberID(event.target.value)}>{members.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</select></label><label>{tx("Username", "用户名")}<input minLength="3" maxLength="32" pattern="[a-z0-9][a-z0-9._-]{2,31}" value={username} onChange={event => setUsername(event.target.value.toLowerCase())} required /></label><label>{tx("New password", "新密码")}<input type="password" autoComplete="new-password" minLength="10" maxLength="128" value={password} onChange={event => setPassword(event.target.value)} required /></label><button className="primary-button" disabled={busy || !memberID}>{busy ? tx("Saving…", "正在保存…") : tx("Save member login", "保存成员登录")}</button></form></section>;
 }
 
 function MCPSessionSettings({ api, config, member, notify }) {
@@ -629,8 +673,8 @@ function SharePolicySettings({ api, member, notify }) {
   return <section className="settings-section share-policy-section card">
     <div>
       <p className="eyebrow">PERSONAL SHARE POLICY</p>
-      <div className="policy-member"><Avatar member={member} /><div><h2>{tx(`${member.name}'s sharing rules`, `${member.name}的分享规则`)}</h2><span>{tx("Viewing as", "当前身份")} · {member.role === "elder" ? tx("Elder", "老人") : tx("Family member", "家庭成员")}</span></div></div>
-      <p className="muted-copy">{tx("These rules belong only to this member and guide AI sharing suggestions for images, video, and text. Switch identity in the top right to configure someone else.", "这套规则只属于当前成员，同时用于图片/视频和文字想法的 AI 分享判断。切换右上角身份即可配置另一个人。")}</p>
+      <div className="policy-member"><Avatar member={member} /><div><h2>{tx(`${member.name}'s sharing rules`, `${member.name}的分享规则`)}</h2><span>{tx("Signed in as", "当前登录")} · {member.role === "elder" ? tx("Elder", "老人") : tx("Family member", "家庭成员")}</span></div></div>
+      <p className="muted-copy">{tx("These rules belong to your signed-in member identity and guide AI sharing suggestions for images, video, and text.", "这套规则只属于当前登录的成员身份，同时用于图片、视频和文字想法的 AI 分享判断。")}</p>
     </div>
     {loading ? <div className="policy-loading">{tx("Loading personal rules…", "正在读取个人规则…")}</div> : <form className="share-policy-form" onSubmit={save}>
       <fieldset>
@@ -677,7 +721,7 @@ function createAPI(config) {
   return async (path, options = {}) => {
     const { admin = false, ...fetchOptions } = options;
     const headers = new Headers(fetchOptions.headers || {});
-    if (admin) headers.set("X-Admin-Token", config.adminToken || ""); else headers.set("X-Family-Token", config.token);
+    if (admin) headers.set("X-Admin-Token", config.adminToken || ""); else headers.set("Authorization", `Bearer ${config.sessionToken || ""}`);
     if (fetchOptions.body && !(fetchOptions.body instanceof FormData)) headers.set("Content-Type", "application/json");
     const response = await fetch(`${config.apiBase}${path}`, { ...fetchOptions, headers });
     if (options.raw) {

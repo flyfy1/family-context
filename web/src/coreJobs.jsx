@@ -25,7 +25,7 @@ export function NotificationInbox({ api, currentMember, notify, refreshKey }) {
   useEffect(() => {
     if (!currentMember) return;
     let active = true;
-    api(`/api/v1/notifications?memberId=${encodeURIComponent(currentMember.id)}`)
+    api("/api/v1/me/notifications")
       .then(result => active && setNotifications((result.notifications || []).filter(item => !item.readAt)))
       .catch(error => active && notify(error.message));
     return () => { active = false; };
@@ -33,10 +33,7 @@ export function NotificationInbox({ api, currentMember, notify, refreshKey }) {
 
   async function acknowledge(notification) {
     try {
-      await api(`/api/v1/notifications/${notification.id}/read`, {
-        method: "POST",
-        body: JSON.stringify({ memberId: currentMember.id }),
-      });
+      await api(`/api/v1/me/notifications/${notification.id}/read`, { method: "POST" });
       setNotifications(items => items.filter(item => item.id !== notification.id));
     } catch (error) { notify(error.message); }
   }
@@ -57,8 +54,8 @@ function notificationTitle(type, language) {
   return text(language, "Family care reminder", "家人关怀提醒");
 }
 
-export function CoreJobSettings({ apiBase, familyToken, language, members, notify, refresh }) {
-  const [adminToken, setAdminToken] = useState(() => localStorage.getItem("fd.adminToken") || familyToken || "");
+export function CoreJobSettings({ apiBase, language, members, notify, refresh }) {
+  const [adminToken, setAdminToken] = useState("");
   const [selectedMemberID, setSelectedMemberID] = useState("");
   const [rules, setRules] = useState({});
   const [scheduledJobs, setScheduledJobs] = useState([]);
@@ -90,7 +87,6 @@ export function CoreJobSettings({ apiBase, familyToken, language, members, notif
       const byMember = Object.fromEntries((result.rules || []).map(rule => [rule.targetMemberId, rule]));
       setRules(byMember);
       setScheduledJobs(scheduled.jobs || []);
-      localStorage.setItem("fd.adminToken", adminToken.trim());
       notify(text(language, "Administrator access confirmed", "管理员权限已确认"));
     } catch (error) { notify(error.message); }
     finally { setLoading(false); }
