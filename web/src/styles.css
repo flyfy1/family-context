@@ -42,8 +42,11 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
 .topbar { min-height: 112px; display: flex; justify-content: space-between; align-items: center; gap: 24px; border-bottom: 1px solid var(--line); }
 .topbar h1 { margin: 3px 0 0; font-size: 31px; font-weight: 600; }
 .topbar p { margin: 0; color: var(--muted); font-size: 12px; }
-.member-switcher { min-width: 190px; display: grid; gap: 5px; color: var(--muted); font-size: 10px; letter-spacing: .08em; }
-.member-switcher select { min-height: 42px; padding: 0 35px 0 13px; border: 1px solid var(--line); border-radius: 11px; outline: none; color: var(--ink); background: var(--card); font-weight: 700; }
+.topbar-actions { display: flex; align-items: end; gap: 10px; }
+.member-switcher, .language-switcher { display: grid; gap: 5px; color: var(--muted); font-size: 10px; letter-spacing: .08em; }
+.member-switcher { min-width: 190px; }
+.language-switcher { min-width: 105px; }
+.member-switcher select, .language-switcher select { min-height: 42px; padding: 0 35px 0 13px; border: 1px solid var(--line); border-radius: 11px; outline: none; color: var(--ink); background: var(--card); font-weight: 700; }
 .page-grid { display: grid; grid-template-columns: minmax(0, 1fr) 316px; gap: 42px; padding-top: 40px; align-items: start; }
 .right-rail { display: grid; gap: 16px; }
 .card { background: var(--card); border: 1px solid rgba(255,255,255,.85); border-radius: 20px; box-shadow: var(--shadow); }
@@ -254,7 +257,10 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
   .sidebar { display: none; }
   .main-shell { width: min(100% - 24px, 620px); padding-bottom: 100px; }
   .topbar { min-height: 92px; }.topbar h1 { font-size: 26px; }.topbar > div p { display: none; }
-  .member-switcher { min-width: 150px; }
+  .topbar { align-items: center; }
+  .topbar-actions { gap: 6px; }
+  .member-switcher { min-width: 140px; }
+  .language-switcher { min-width: 92px; }
   .mobile-nav { position: fixed; inset: auto 10px 10px; z-index: 15; display: grid; grid-template-columns: repeat(4, 1fr); padding: 6px; border: 1px solid rgba(255,255,255,.75); border-radius: 17px; background: rgba(255,253,249,.92); box-shadow: 0 15px 45px rgba(72,52,41,.18); backdrop-filter: blur(16px); }
   .mobile-nav a { min-height: 48px; display: grid; justify-items: center; gap: 1px; padding: 3px; font-size: 9px; }.mobile-nav a.active { color: var(--rust); background: #f4e6dc; }.mobile-nav .nav-icon { font-size: 17px; }
   .page-grid, .space-page, .elder-page, .settings-page { padding-top: 24px; }
@@ -270,7 +276,8 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
 }
 
 @media (max-width: 430px) {
-  .member-switcher span { display: none; }.member-switcher { min-width: 135px; }
+  .topbar > div:first-child p { display: none; }
+  .member-switcher span, .language-switcher span { display: none; }.member-switcher { min-width: 112px; }.language-switcher { min-width: 88px; }
   .visibility { width: 100%; }.visibility button { flex: 1; }
   .voice-actions { align-items: stretch; flex-direction: column; }.audio-button { width: 100%; justify-content: center; }
   .elder-hero { padding-inline: 0; }.elder-hero h2 { font-size: 35px; }.elder-summary { padding: 21px; }.summary-content { font-size: 17px; }
