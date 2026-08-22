@@ -15,6 +15,7 @@ func prepareSpacesRoot(storageRoot string) (string, error) {
 		filepath.Join(root, "shared", "updates"),
 		filepath.Join(root, "shared", "media"),
 		filepath.Join(root, "shared", "summaries"),
+		filepath.Join(root, "shared", "stories"),
 		filepath.Join(root, "shared", "sources"),
 	} {
 		if err := os.MkdirAll(dir, 0o750); err != nil {
@@ -22,6 +23,14 @@ func prepareSpacesRoot(storageRoot string) (string, error) {
 		}
 	}
 	return root, nil
+}
+
+func persistBedtimeStoryToSpace(spacesRoot string, story BedtimeStory) error {
+	data, err := json.MarshalIndent(story, "", "  ")
+	if err != nil {
+		return err
+	}
+	return writeFileAtomically(filepath.Join(spacesRoot, "shared", "stories"), story.ID+".json", append(data, '\n'))
 }
 
 func createMemberSpace(spacesRoot string, member Member) error {

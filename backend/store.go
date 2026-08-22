@@ -159,6 +159,23 @@ CREATE TABLE IF NOT EXISTS media_imports (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS bedtime_stories (
+  id TEXT PRIMARY KEY,
+  family_id TEXT NOT NULL,
+  child_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  child_name TEXT NOT NULL,
+  audience_age INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  source_update_ids_json TEXT NOT NULL,
+  voice TEXT NOT NULL,
+  audio_file TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL,
+  error_message TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_questions_created_at ON questions(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_replies_answer_id ON replies(answer_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_archived_answers_question_id ON archived_answers(question_id, archived_at DESC);
@@ -169,6 +186,8 @@ CREATE INDEX IF NOT EXISTS idx_updates_member_created ON updates(member_id, crea
 CREATE INDEX IF NOT EXISTS idx_summaries_family_date ON daily_summaries(family_id, summary_date DESC, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_media_imports_member_created ON media_imports(member_id, created_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_media_imports_client_id ON media_imports(member_id, device_id, client_media_id) WHERE client_media_id != '';
+CREATE INDEX IF NOT EXISTS idx_bedtime_stories_family_created ON bedtime_stories(family_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_bedtime_stories_child_created ON bedtime_stories(child_id, created_at DESC);
 `)
 	if err != nil {
 		return err

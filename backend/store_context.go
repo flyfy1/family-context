@@ -112,6 +112,25 @@ func (s *store) sharedUpdatesForDate(ctx context.Context, familyID, date string)
 	return updates, rows.Err()
 }
 
+func (s *store) sharedUpdatesSince(ctx context.Context, familyID string, since time.Time, limit int) ([]Update, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, family_id, member_id, type, text, visibility, audio_file, transcript, ai_summary, source, created_at
+		FROM updates WHERE family_id = ? AND visibility = 'family' AND created_at >= ? ORDER BY created_at DESC LIMIT ?`,
+		familyID, since.Format(time.RFC3339Nano), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	updates := make([]Update, 0)
+	for rows.Next() {
+		update, err := scanUpdate(rows)
+		if err != nil {
+			return nil, err
+		}
+		updates = append(updates, update)
+	}
+	return updates, rows.Err()
+}
+
 func (s *store) createDailySummary(ctx context.Context, summary DailySummary) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

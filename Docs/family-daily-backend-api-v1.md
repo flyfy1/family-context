@@ -57,6 +57,11 @@ POST /api/v1/me/media-imports
 GET  /api/v1/me/media-imports
 GET  /api/v1/me/media-imports/{import-id}
 POST /api/v1/me/media-imports/{import-id}/decision
+
+POST /api/v1/bedtime-stories
+GET  /api/v1/bedtime-stories
+GET  /api/v1/bedtime-stories/{story-id}
+GET  /api/v1/bedtime-stories/{story-id}/audio
 GET  /api/v1/me/share-policy
 PUT  /api/v1/me/share-policy
 ```
@@ -70,6 +75,8 @@ PUT  /api/v1/me/share-policy
 媒体先写入成员的 `media/`，然后写成员 Markdown 记录和 SQLite 索引。家庭可见内容另外生成 `spaces/shared/updates/<update-id>.json` 投影。
 
 手机照片/视频同步使用独立的私密导入流，不会在上传时默认公开。完整请求字段、幂等规则、AI 状态和审核流程见 [手机照片/视频同步 API V1](./mobile-media-sync-api-v1.md)。
+
+儿童睡前故事只使用家庭可见 Update，先持久化故事文本与来源，再通过 Gemini TTS 生成本地 WAV。完整契约见 [儿童家庭睡前故事 API V1](./child-bedtime-story-api-v1.md)。
 
 ## 分享策略
 

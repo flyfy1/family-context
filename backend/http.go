@@ -32,6 +32,8 @@ type app struct {
 	summarizer  dailySummarizer
 	sharePolicy sharePolicyEvaluator
 	mediaAI     mediaAnalyzer
+	storyAI     bedtimeStoryGenerator
+	tts         speechSynthesizer
 	mediaDir    string
 	spacesRoot  string
 	apiToken    string
@@ -57,7 +59,15 @@ func newApp(store *store, ai audioProcessor, mediaDir, apiToken string) *app {
 	if !ok {
 		mediaAI = stubAudioProcessor{}
 	}
-	return &app{store: store, ai: ai, summarizer: summarizer, sharePolicy: sharePolicy, mediaAI: mediaAI, mediaDir: mediaDir, spacesRoot: spacesRoot, apiToken: apiToken,
+	storyAI, ok := ai.(bedtimeStoryGenerator)
+	if !ok {
+		storyAI = stubAudioProcessor{}
+	}
+	tts, ok := ai.(speechSynthesizer)
+	if !ok {
+		tts = stubAudioProcessor{}
+	}
+	return &app{store: store, ai: ai, summarizer: summarizer, sharePolicy: sharePolicy, mediaAI: mediaAI, storyAI: storyAI, tts: tts, mediaDir: mediaDir, spacesRoot: spacesRoot, apiToken: apiToken,
 		adminToken: envOr("ADMIN_API_TOKEN", apiToken), mcpSessions: make(map[string]string)}
 }
 
@@ -81,6 +91,10 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/updates/voice", a.authorized(a.createVoiceUpdate))
 	mux.HandleFunc("GET /api/v1/daily-summaries/latest", a.authorized(a.latestDailySummary))
 	mux.HandleFunc("POST /api/v1/daily-summaries/generate", a.authorized(a.generateDailySummary))
+	mux.HandleFunc("POST /api/v1/bedtime-stories", a.authorized(a.createBedtimeStory))
+	mux.HandleFunc("GET /api/v1/bedtime-stories", a.authorized(a.listBedtimeStories))
+	mux.HandleFunc("GET /api/v1/bedtime-stories/{id}", a.authorized(a.getBedtimeStory))
+	mux.HandleFunc("GET /api/v1/bedtime-stories/{id}/audio", a.authorized(a.serveBedtimeStoryAudio))
 	a.registerJudgmentRoutes(mux)
 	mux.HandleFunc("GET /space-files/{path...}", a.serveSpaceFile)
 	mux.HandleFunc("GET /api/v1/admin/members", a.adminAuthorized(a.adminListMembers))

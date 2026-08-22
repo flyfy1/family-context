@@ -143,3 +143,26 @@ type DailySummary struct {
 	UpdateCount int       `json:"updateCount"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
+
+type BedtimeStory struct {
+	ID              string    `json:"id"`
+	FamilyID        string    `json:"familyId"`
+	ChildID         string    `json:"childId"`
+	ChildName       string    `json:"childName"`
+	AudienceAge     int       `json:"audienceAge"`
+	Title           string    `json:"title"`
+	Content         string    `json:"content"`
+	SourceUpdateIDs []string  `json:"sourceUpdateIds"`
+	Voice           string    `json:"voice"`
+	AudioURL        string    `json:"audioUrl,omitempty"`
+	Status          string    `json:"status"`
+	ErrorMessage    string    `json:"errorMessage,omitempty"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
+}
+
+type BedtimeStoryDraft struct {
+	Title           string   `json:"title"`
+	Content         string   `json:"content"`
+	SourceUpdateIDs []string `json:"sourceUpdateIds"`
+}
