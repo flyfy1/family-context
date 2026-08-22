@@ -39,6 +39,7 @@ func (a *app) createMember(w http.ResponseWriter, r *http.Request) {
 		FamilyID string `json:"familyId"`
 		Name     string `json:"name"`
 		Role     string `json:"role"`
+		IsAdmin  bool   `json:"isAdmin"`
 		Color    string `json:"color"`
 	}
 	if err := readJSON(r, &input); err != nil {
@@ -63,7 +64,7 @@ func (a *app) createMember(w http.ResponseWriter, r *http.Request) {
 	if !hexColorPattern.MatchString(input.Color) {
 		input.Color = "#AD4C34"
 	}
-	member := Member{ID: newID(), FamilyID: input.FamilyID, Name: input.Name, Role: input.Role, Color: input.Color, CreatedAt: time.Now().UTC()}
+	member := Member{ID: newID(), FamilyID: input.FamilyID, Name: input.Name, Role: input.Role, IsAdmin: input.IsAdmin, Color: input.Color, CreatedAt: time.Now().UTC()}
 	if err := createMemberSpace(a.spacesRoot, member); err != nil {
 		writeError(w, http.StatusInternalServerError, "暂时无法创建成员文件空间")
 		return

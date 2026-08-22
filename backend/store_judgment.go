@@ -180,10 +180,10 @@ func (s *store) updateForMember(ctx context.Context, updateID, memberID string) 
 }
 
 func (s *store) judgmentMemberByID(ctx context.Context, memberID string) (Member, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id, family_id, name, role, color, created_at FROM members WHERE id = ?`, memberID)
+	row := s.db.QueryRowContext(ctx, `SELECT id, family_id, name, role, is_admin, color, created_at FROM members WHERE id = ?`, memberID)
 	var member Member
 	var createdAt string
-	if err := row.Scan(&member.ID, &member.FamilyID, &member.Name, &member.Role, &member.Color, &createdAt); err != nil {
+	if err := row.Scan(&member.ID, &member.FamilyID, &member.Name, &member.Role, &member.IsAdmin, &member.Color, &createdAt); err != nil {
 		return Member{}, err
 	}
 	var err error

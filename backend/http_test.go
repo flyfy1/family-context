@@ -257,6 +257,7 @@ func requestJSON[T any](t *testing.T, client *http.Client, method, url string, i
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Family-Token", "test-token")
+	req.Header.Set("X-Admin-Token", "test-token")
 	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)

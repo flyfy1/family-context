@@ -211,3 +211,29 @@ func TestDevelopmentCORSAllowsVite(t *testing.T) {
 		t.Fatalf("unexpected CORS response: status=%d origin=%q", resp.StatusCode, resp.Header.Get("Access-Control-Allow-Origin"))
 	}
 }
+
+func TestMemberCreationRequiresAdminToken(t *testing.T) {
+	t.Parallel()
+	temp := t.TempDir()
+	store, err := openStore(filepath.Join(temp, "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close() })
+	server := httptest.NewServer(newApp(store, stubAudioProcessor{}, filepath.Join(temp, "media"), "test-token").routes())
+	t.Cleanup(server.Close)
+	body, _ := json.Marshal(map[string]any{
+		"familyId": defaultFamilyID, "name": "访客", "role": "member", "color": "#AD4C34",
+	})
+	req, _ := http.NewRequest(http.MethodPost, server.URL+"/api/v1/members", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Family-Token", "test-token")
+	resp, err := server.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("family-only member creation status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
+	}
+}

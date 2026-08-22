@@ -28,6 +28,7 @@ func (a *app) adminCreateMember(w http.ResponseWriter, r *http.Request) {
 		FamilyID string `json:"familyId"`
 		Name     string `json:"name"`
 		Role     string `json:"role"`
+		IsAdmin  bool   `json:"isAdmin"`
 		Color    string `json:"color"`
 	}
 	if err := readJSON(r, &input); err != nil {
@@ -48,7 +49,7 @@ func (a *app) adminCreateMember(w http.ResponseWriter, r *http.Request) {
 	if !hexColorPattern.MatchString(input.Color) {
 		input.Color = "#AD4C34"
 	}
-	member := Member{ID: newID(), FamilyID: input.FamilyID, Name: input.Name, Role: input.Role, Color: input.Color, CreatedAt: time.Now().UTC()}
+	member := Member{ID: newID(), FamilyID: input.FamilyID, Name: input.Name, Role: input.Role, IsAdmin: input.IsAdmin, Color: input.Color, CreatedAt: time.Now().UTC()}
 	if err := createMemberSpace(a.spacesRoot, member); err != nil {
 		writeError(w, http.StatusInternalServerError, "暂时无法创建成员文件空间")
 		return
@@ -76,9 +77,10 @@ func (a *app) adminUpdateMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		Name  string `json:"name"`
-		Role  string `json:"role"`
-		Color string `json:"color"`
+		Name    string `json:"name"`
+		Role    string `json:"role"`
+		IsAdmin bool   `json:"isAdmin"`
+		Color   string `json:"color"`
 	}
 	if err := readJSON(r, &input); err != nil {
 		writeError(w, http.StatusBadRequest, "成员信息格式不正确")
@@ -89,7 +91,7 @@ func (a *app) adminUpdateMember(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "成员称呼、角色或颜色不正确")
 		return
 	}
-	member.Name, member.Role, member.Color = input.Name, input.Role, input.Color
+	member.Name, member.Role, member.IsAdmin, member.Color = input.Name, input.Role, input.IsAdmin, input.Color
 	if err := a.store.updateMember(r.Context(), member, time.Now().UTC()); err != nil {
 		writeError(w, http.StatusInternalServerError, "暂时无法更新成员")
 		return

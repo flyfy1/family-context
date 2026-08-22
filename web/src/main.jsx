@@ -12,6 +12,7 @@ function loadConfig() {
     familyName: localStorage.getItem("fd.familyName") || "我们的家",
     apiBase: (localStorage.getItem("fd.apiBase") || DEFAULT_API_BASE).replace(/\/$/, ""),
     token: localStorage.getItem("fd.token") || "family-daily-local",
+    adminToken: localStorage.getItem("fd.adminToken") || "",
   };
 }
 
@@ -78,7 +79,7 @@ function App() {
     <main className="main-shell">
       <Topbar route={route} members={members} currentMember={currentMember} onMemberChange={setCurrentMemberId} />
       {error && route !== "/settings" && <ConnectionError message={error} onSettings={() => { location.hash = "/settings"; }} />}
-      {route === "/settings" && <Settings api={api} config={config} setConfig={setConfig} members={members} refresh={refresh} notify={notify} />}
+      {route === "/settings" && <Settings api={api} config={config} setConfig={setConfig} members={members} currentMember={currentMember} refresh={refresh} notify={notify} />}
       {!error && !loading && members.length === 0 && route !== "/settings" && <Onboarding onStart={() => { location.hash = "/settings"; }} />}
       {!error && members.length > 0 && route !== "/settings" && <>
         {route === "/feed" && <FamilyFeed {...pageProps} />}
@@ -115,7 +116,7 @@ function Topbar({ route, members, currentMember, onMemberChange }) {
   const titles = { "/feed": ["家庭动态", "看看大家最近发生了什么"], "/space": ["我的 Space", "属于你的独立记录空间"], "/elder": ["老人模式", "说一说，听听家里的今天"], "/settings": ["家庭设置", "成员和连接配置"] };
   return <header className="topbar">
     <div><p>{titles[route][1]}</p><h1>{titles[route][0]}</h1></div>
-    {members.length > 0 && <label className="member-switcher"><span>当前身份</span><select value={currentMember?.id || ""} onChange={event => onMemberChange(event.target.value)}>{members.map(member => <option key={member.id} value={member.id}>{member.name}{member.role === "elder" ? " · 老人" : member.role === "child" ? " · 孩子" : ""}</option>)}</select></label>}
+    {members.length > 0 && <label className="member-switcher"><span>当前身份</span><select value={currentMember?.id || ""} onChange={event => onMemberChange(event.target.value)}>{members.map(member => <option key={member.id} value={member.id}>{member.name}{member.isAdmin ? " · 管理员" : member.role === "elder" ? " · 老人" : member.role === "child" ? " · 孩子" : ""}</option>)}</select></label>}
   </header>;
 }
 
@@ -332,6 +333,7 @@ function FamilyTree({ members }) {
         <span className="tree-generation-label">{level.label}</span>
         <div className="tree-nodes">
           {levelMembers.length ? levelMembers.map(member => <article className="tree-node" key={member.id}>
+            {member.isAdmin && <span className="admin-badge">管理员</span>}
             <Avatar member={member} />
             <strong>{member.name}</strong>
             <span>{level.label} · 独立 Space</span>
@@ -344,28 +346,29 @@ function FamilyTree({ members }) {
 
 function PrivacyCard() { return <section className="privacy-card"><span>⌂</span><div><strong>本地优先</strong><p>成员 Space、原始录音、摘要和历史保存在家庭服务器。语音会发送给 Gemini 做一次性整理。</p></div></section>; }
 
-function Settings({ api, config, setConfig, members, refresh, notify }) {
+function Settings({ api, config, setConfig, members, currentMember, refresh, notify }) {
   const [form, setForm] = useState(config);
-  const [newMember, setNewMember] = useState({ name: "", role: "member", color: colors[members.length % colors.length] });
+  const [newMember, setNewMember] = useState({ name: "", role: "member", isAdmin: false, color: colors[members.length % colors.length] });
   const [busy, setBusy] = useState(false);
+  const canManageMembers = currentMember?.isAdmin && Boolean(config.adminToken);
   function saveConnection(event) {
     event.preventDefault();
     const next = { ...form, apiBase: form.apiBase.replace(/\/$/, "") };
-    localStorage.setItem("fd.familyName", next.familyName); localStorage.setItem("fd.apiBase", next.apiBase); localStorage.setItem("fd.token", next.token);
+    localStorage.setItem("fd.familyName", next.familyName); localStorage.setItem("fd.apiBase", next.apiBase); localStorage.setItem("fd.token", next.token); localStorage.setItem("fd.adminToken", next.adminToken);
     setConfig(next); notify("网页配置已保存在当前浏览器");
   }
   async function addMember(event) {
     event.preventDefault(); setBusy(true);
     try {
-      await api("/api/v1/members", { method: "POST", body: JSON.stringify({ familyId: FAMILY_ID, ...newMember }) });
-      setNewMember({ name: "", role: "member", color: colors[(members.length + 1) % colors.length] });
+      await api("/api/v1/members", { method: "POST", admin: true, body: JSON.stringify({ familyId: FAMILY_ID, ...newMember }) });
+      setNewMember({ name: "", role: "member", isAdmin: false, color: colors[(members.length + 1) % colors.length] });
       notify("成员和独立 Space 已创建"); refresh();
     } catch (error) { notify(error.message); }
     finally { setBusy(false); }
   }
   return <div className="settings-page">
-    <section className="settings-section card"><div><p className="eyebrow">BROWSER CONFIG</p><h2>连接设置</h2><p className="muted-copy">前端可以部署到 GitHub Pages；API 地址指向实际运行的 Go 后端。</p></div><form className="settings-form" onSubmit={saveConnection}><label>家庭名称<input value={form.familyName} onChange={event => setForm({ ...form, familyName: event.target.value })} required /></label><label>后端 API 地址<input value={form.apiBase} onChange={event => setForm({ ...form, apiBase: event.target.value })} placeholder="本地留空；远程填写 https://api.example.com" /></label><label>家庭访问令牌<input type="password" value={form.token} onChange={event => setForm({ ...form, token: event.target.value })} required /></label><button className="primary-button">保存连接</button></form></section>
-    <section className="settings-section family-tree-section card"><div><p className="eyebrow">FAMILY TREE</p><h2>家庭成员</h2><p className="muted-copy">成员会按长辈、家人和孩子自动成为树上的节点。新增成员后，无需手动调整布局。</p></div><div><FamilyTree members={members} /><form className="add-member" onSubmit={addMember}><input value={newMember.name} maxLength="30" onChange={event => setNewMember({ ...newMember, name: event.target.value })} placeholder="成员称呼" required /><select value={newMember.role} onChange={event => setNewMember({ ...newMember, role: event.target.value })}><option value="member">普通成员</option><option value="elder">老人</option><option value="child">孩子</option></select><div className="color-picker">{colors.map(color => <button type="button" aria-label={`选择颜色 ${color}`} key={color} className={newMember.color === color ? "active" : ""} style={{ background: color }} onClick={() => setNewMember({ ...newMember, color })} />)}</div><button className="primary-button" disabled={busy}>{busy ? "正在创建…" : "+ 添加成员"}</button></form></div></section>
+    <section className="settings-section card"><div><p className="eyebrow">BROWSER CONFIG</p><h2>连接设置</h2><p className="muted-copy">管理员令牌与家庭令牌分开保存，只用于成员配置操作。</p></div><form className="settings-form" onSubmit={saveConnection}><label>家庭名称<input value={form.familyName} onChange={event => setForm({ ...form, familyName: event.target.value })} required /></label><label>后端 API 地址<input value={form.apiBase} onChange={event => setForm({ ...form, apiBase: event.target.value })} placeholder="本地留空；远程填写 https://api.example.com" /></label><label>家庭访问令牌<input type="password" value={form.token} onChange={event => setForm({ ...form, token: event.target.value })} required /></label><label>管理员令牌<input type="password" value={form.adminToken} onChange={event => setForm({ ...form, adminToken: event.target.value })} placeholder="仅管理员需要填写" /></label><button className="primary-button">保存连接</button></form></section>
+    <section className="settings-section family-tree-section card"><div><p className="eyebrow">FAMILY TREE</p><h2>家庭成员</h2><p className="muted-copy">管理员会显示专属标记。只有管理员身份和管理员令牌同时就绪，才能进入成员配置。</p></div><div><FamilyTree members={members} />{canManageMembers ? <form className="add-member" onSubmit={addMember}><input value={newMember.name} maxLength="30" onChange={event => setNewMember({ ...newMember, name: event.target.value })} placeholder="成员称呼" required /><select value={newMember.role} onChange={event => setNewMember({ ...newMember, role: event.target.value })}><option value="member">普通成员</option><option value="elder">老人</option><option value="child">孩子</option></select><label className="admin-option"><input type="checkbox" checked={newMember.isAdmin} onChange={event => setNewMember({ ...newMember, isAdmin: event.target.checked })} />设为管理员</label><div className="color-picker">{colors.map(color => <button type="button" aria-label={`选择颜色 ${color}`} key={color} className={newMember.color === color ? "active" : ""} style={{ background: color }} onClick={() => setNewMember({ ...newMember, color })} />)}</div><button className="primary-button" disabled={busy}>{busy ? "正在创建…" : "+ 添加成员"}</button></form> : <div className="admin-gate"><strong>{currentMember?.isAdmin ? "还需要管理员令牌" : "只有管理员可以配置成员"}</strong><p>{currentMember?.isAdmin ? "请在上方连接设置中填写独立的管理员令牌。" : "切换到带有“管理员”标记的家庭成员后，才会显示成员配置。"}</p></div>}</div></section>
     <section className="future-boundary"><strong>下一阶段边界</strong><p>MCP、成员定时分析任务和家庭摄像头/NAS 数据源会建立在这些独立 Space 上。当前 PoC 不开放任意文件系统访问，也不自动读取监控录像。</p></section>
   </div>;
 }
@@ -398,11 +401,13 @@ function MobileNav({ route }) { return <nav className="mobile-nav"><NavLink to="
 
 function createAPI(config) {
   return async (path, options = {}) => {
-    const headers = new Headers(options.headers || {});
+    const { admin = false, ...requestOptions } = options;
+    const headers = new Headers(requestOptions.headers || {});
     headers.set("X-Family-Token", config.token);
-    if (options.body && !(options.body instanceof FormData)) headers.set("Content-Type", "application/json");
-    const response = await fetch(`${config.apiBase}${path}`, { ...options, headers });
-    if (options.raw) {
+    if (admin && config.adminToken) headers.set("X-Admin-Token", config.adminToken);
+    if (requestOptions.body && !(requestOptions.body instanceof FormData)) headers.set("Content-Type", "application/json");
+    const response = await fetch(`${config.apiBase}${path}`, { ...requestOptions, headers });
+    if (requestOptions.raw) {
       if (!response.ok) throw new Error("暂时无法读取文件");
       return response.blob();
     }

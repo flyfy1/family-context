@@ -182,6 +182,7 @@ Current values used by the code:
 - `questions.status`: `pending`, `answered`
 - `answers.status`: `processing`, `ready`, `processing_failed`, `shared`
 - `members.role`: `member`, `elder`, `child`
+- `members.is_admin`: administrator capability flag, independent of generation role
 - `updates.type`: currently `text`, `voice`
 - `updates.visibility`: `private`, `family`
 - `updates.source`: currently `member`, `member_voice`, `member_voice_processing_failed`, `member_thought`

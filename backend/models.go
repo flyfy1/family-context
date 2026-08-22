@@ -64,6 +64,7 @@ type Member struct {
 	FamilyID  string    `json:"familyId"`
 	Name      string    `json:"name"`
 	Role      string    `json:"role"`
+	IsAdmin   bool      `json:"isAdmin"`
 	Color     string    `json:"color"`
 	CreatedAt time.Time `json:"createdAt"`
 }

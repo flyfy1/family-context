@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS members (
   family_id TEXT NOT NULL,
   name TEXT NOT NULL,
   role TEXT NOT NULL,
+  is_admin INTEGER NOT NULL DEFAULT 0,
   color TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
@@ -146,6 +147,16 @@ CREATE INDEX IF NOT EXISTS idx_updates_family_created ON updates(family_id, crea
 CREATE INDEX IF NOT EXISTS idx_updates_member_created ON updates(member_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_summaries_family_date ON daily_summaries(family_id, summary_date DESC, created_at DESC);
 `)
+	if err != nil {
+		return err
+	}
+	var hasAdminColumn int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('members') WHERE name = 'is_admin'`).Scan(&hasAdminColumn); err != nil {
+		return err
+	}
+	if hasAdminColumn == 0 {
+		_, err = s.db.ExecContext(ctx, `ALTER TABLE members ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0`)
+	}
 	return err
 }
 

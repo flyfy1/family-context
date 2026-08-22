@@ -164,12 +164,18 @@ h1, h2, h3 { font-family: Georgia, "Noto Serif SC", "Songti SC", serif; letter-s
 .tree-node::before { content: ""; position: absolute; top: -12px; left: 50%; width: 1px; height: 12px; background: rgba(97,114,105,.28); }
 .tree-node strong { font-size: 13px; }
 .tree-node > span:last-child { color: var(--muted); font-size: 9px; }
+.tree-node .admin-badge { position: absolute; top: 7px; right: 7px; padding: 3px 6px; border-radius: 99px; color: #7b4b00; background: #f8e7bd; font-size: 8px; font-weight: 850; letter-spacing: .04em; }
 .tree-generation-child .tree-node { background: #fff9ef; }
 .tree-generation-elder .tree-node { background: #f7f8f4; }
 .tree-node-empty { border-style: dashed; color: var(--muted); background: rgba(255,255,255,.35) !important; box-shadow: none; }
 .tree-node-empty > span { width: 30px; height: 30px; display: grid; place-items: center; border: 1px dashed rgba(97,114,105,.35); border-radius: 50%; color: var(--sage); font-size: 17px; }
 .tree-node-empty strong { font-size: 10px; font-weight: 650; }
-.add-member { display: grid; grid-template-columns: 1.1fr .8fr; gap: 9px; padding-top: 18px; border-top: 1px solid var(--line); }
+.add-member { display: grid; grid-template-columns: 1.1fr .8fr; gap: 9px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
+.admin-option { min-height: 36px; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 10px; font-weight: 750; }
+.admin-option input { width: 16px; height: 16px; accent-color: var(--rust); }
+.admin-gate { margin-top: 18px; padding: 15px 17px; border: 1px dashed rgba(173,76,52,.24); border-radius: 13px; color: var(--muted); background: rgba(173,76,52,.04); }
+.admin-gate strong { color: var(--rust-dark); font-size: 12px; }
+.admin-gate p { margin: 5px 0 0; font-size: 10px; line-height: 1.6; }
 .color-picker { display: flex; align-items: center; gap: 7px; }
 .color-picker button { width: 23px; height: 23px; padding: 0; border: 3px solid var(--card); border-radius: 50%; box-shadow: 0 0 0 1px var(--line); }
 .color-picker button.active { box-shadow: 0 0 0 2px var(--ink); }

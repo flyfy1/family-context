@@ -67,7 +67,7 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/answers/{id}/archive", a.authorized(a.archiveDraftAnswer))
 	mux.HandleFunc("POST /api/v1/answers/{id}/replies", a.authorized(a.createReply))
 	mux.HandleFunc("GET /api/v1/members", a.authorized(a.listMembers))
-	mux.HandleFunc("POST /api/v1/members", a.authorized(a.createMember))
+	mux.HandleFunc("POST /api/v1/members", a.adminAuthorized(a.createMember))
 	mux.HandleFunc("GET /api/v1/updates", a.authorized(a.listUpdates))
 	mux.HandleFunc("POST /api/v1/updates", a.authorized(a.createTextUpdate))
 	mux.HandleFunc("POST /api/v1/updates/image", a.authorized(a.createImageUpdate))

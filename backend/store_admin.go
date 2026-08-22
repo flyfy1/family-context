@@ -10,8 +10,8 @@ import (
 func (s *store) getMember(ctx context.Context, id string) (Member, error) {
 	var member Member
 	var createdAt string
-	err := s.db.QueryRowContext(ctx, `SELECT id, family_id, name, role, color, created_at FROM members WHERE id = ?`, id).
-		Scan(&member.ID, &member.FamilyID, &member.Name, &member.Role, &member.Color, &createdAt)
+	err := s.db.QueryRowContext(ctx, `SELECT id, family_id, name, role, is_admin, color, created_at FROM members WHERE id = ?`, id).
+		Scan(&member.ID, &member.FamilyID, &member.Name, &member.Role, &member.IsAdmin, &member.Color, &createdAt)
 	if err != nil {
 		return Member{}, err
 	}
@@ -25,7 +25,7 @@ func (s *store) updateMember(ctx context.Context, member Member, changedAt time.
 		return err
 	}
 	defer tx.Rollback()
-	result, err := tx.ExecContext(ctx, `UPDATE members SET name = ?, role = ?, color = ? WHERE id = ?`, member.Name, member.Role, member.Color, member.ID)
+	result, err := tx.ExecContext(ctx, `UPDATE members SET name = ?, role = ?, is_admin = ?, color = ? WHERE id = ?`, member.Name, member.Role, member.IsAdmin, member.Color, member.ID)
 	if err != nil {
 		return err
 	}
@@ -47,9 +47,9 @@ func (s *store) setMemberTokenHash(ctx context.Context, memberID, tokenHash stri
 func (s *store) memberByTokenHash(ctx context.Context, tokenHash string) (Member, error) {
 	var member Member
 	var createdAt string
-	err := s.db.QueryRowContext(ctx, `SELECT m.id, m.family_id, m.name, m.role, m.color, m.created_at
+	err := s.db.QueryRowContext(ctx, `SELECT m.id, m.family_id, m.name, m.role, m.is_admin, m.color, m.created_at
 		FROM members m JOIN member_tokens t ON t.member_id = m.id WHERE t.token_hash = ?`, tokenHash).
-		Scan(&member.ID, &member.FamilyID, &member.Name, &member.Role, &member.Color, &createdAt)
+		Scan(&member.ID, &member.FamilyID, &member.Name, &member.Role, &member.IsAdmin, &member.Color, &createdAt)
 	if err != nil {
 		return Member{}, err
 	}
