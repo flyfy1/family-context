@@ -39,6 +39,21 @@ func TestMemberUsernamePasswordLoginAndLogout(t *testing.T) {
 	if me.ID != credential.Member.ID {
 		t.Fatalf("session resolved to wrong member: %+v", me)
 	}
+	other := requestAdminJSON[MemberCredential](t, server.Client(), http.MethodPost, server.URL+"/api/v1/admin/members", map[string]any{
+		"familyId": defaultFamilyID, "name": "爸爸", "role": "member", "isAdmin": true, "color": "#AD4C34",
+	}, http.StatusCreated)
+	created := requestMemberJSON[Update](t, server.Client(), http.MethodPost, server.URL+"/api/v1/updates", map[string]string{
+		"familyId": defaultFamilyID, "memberId": other.Member.ID, "text": "不能冒用爸爸发布", "visibility": "private",
+	}, login.AccessToken, http.StatusCreated)
+	if created.MemberID != credential.Member.ID {
+		t.Fatalf("web session impersonated another member: %+v", created)
+	}
+	mine := requestMemberJSON[struct {
+		Updates []Update `json:"updates"`
+	}](t, server.Client(), http.MethodGet, server.URL+"/api/v1/updates?scope=mine&memberId="+other.Member.ID, nil, login.AccessToken, http.StatusOK)
+	if len(mine.Updates) != 1 || mine.Updates[0].MemberID != credential.Member.ID {
+		t.Fatalf("web session read another member's private scope: %+v", mine.Updates)
+	}
 
 	requestMemberJSON[map[string]any](t, server.Client(), http.MethodPost, server.URL+"/api/v1/auth/logout", nil, login.AccessToken, http.StatusNoContent)
 	requestMemberJSON[map[string]any](t, server.Client(), http.MethodGet, server.URL+"/api/v1/me", nil, login.AccessToken, http.StatusUnauthorized)

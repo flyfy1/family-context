@@ -23,6 +23,9 @@ func validMemberRole(role string) bool {
 
 func (a *app) listMembers(w http.ResponseWriter, r *http.Request) {
 	familyID := strings.TrimSpace(r.URL.Query().Get("familyId"))
+	if member := memberFromContext(r.Context()); member.ID != "" {
+		familyID = member.FamilyID
+	}
 	if familyID == "" {
 		familyID = defaultFamilyID
 	}
@@ -83,6 +86,12 @@ func (a *app) listUpdates(w http.ResponseWriter, r *http.Request) {
 	}
 	scope := strings.TrimSpace(r.URL.Query().Get("scope"))
 	memberID := strings.TrimSpace(r.URL.Query().Get("memberId"))
+	if member := memberFromContext(r.Context()); member.ID != "" {
+		familyID = member.FamilyID
+		if scope == "mine" {
+			memberID = member.ID
+		}
+	}
 	if scope == "mine" && memberID == "" {
 		writeError(w, http.StatusBadRequest, "查看个人空间时必须选择成员")
 		return
@@ -113,6 +122,10 @@ func (a *app) createTextUpdate(w http.ResponseWriter, r *http.Request) {
 	input.MemberID = strings.TrimSpace(input.MemberID)
 	input.Text = strings.TrimSpace(input.Text)
 	input.Visibility = strings.TrimSpace(input.Visibility)
+	if member := memberFromContext(r.Context()); member.ID != "" {
+		input.FamilyID = member.FamilyID
+		input.MemberID = member.ID
+	}
 	if input.FamilyID == "" {
 		input.FamilyID = defaultFamilyID
 	}
@@ -151,6 +164,10 @@ func (a *app) createImageUpdate(w http.ResponseWriter, r *http.Request) {
 		familyID = defaultFamilyID
 	}
 	memberID := strings.TrimSpace(r.FormValue("memberId"))
+	if member := memberFromContext(r.Context()); member.ID != "" {
+		familyID = member.FamilyID
+		memberID = member.ID
+	}
 	visibility := strings.TrimSpace(r.FormValue("visibility"))
 	caption := strings.TrimSpace(r.FormValue("text"))
 	if !validVisibility(visibility) || len([]rune(caption)) > 2000 {
@@ -215,6 +232,10 @@ func (a *app) createVoiceUpdate(w http.ResponseWriter, r *http.Request) {
 		familyID = defaultFamilyID
 	}
 	memberID := strings.TrimSpace(r.FormValue("memberId"))
+	if member := memberFromContext(r.Context()); member.ID != "" {
+		familyID = member.FamilyID
+		memberID = member.ID
+	}
 	visibility := strings.TrimSpace(r.FormValue("visibility"))
 	if !validVisibility(visibility) {
 		writeError(w, http.StatusBadRequest, "请选择仅自己或家庭可见")
@@ -281,6 +302,9 @@ func (a *app) createVoiceUpdate(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) latestDailySummary(w http.ResponseWriter, r *http.Request) {
 	familyID := strings.TrimSpace(r.URL.Query().Get("familyId"))
+	if member := memberFromContext(r.Context()); member.ID != "" {
+		familyID = member.FamilyID
+	}
 	if familyID == "" {
 		familyID = defaultFamilyID
 	}
@@ -313,6 +337,9 @@ func (a *app) generateDailySummary(w http.ResponseWriter, r *http.Request) {
 	}
 	if input.FamilyID == "" {
 		input.FamilyID = defaultFamilyID
+	}
+	if member := memberFromContext(r.Context()); member.ID != "" {
+		input.FamilyID = member.FamilyID
 	}
 	language, ok := normalizeLanguage(input.Language)
 	if !ok {
@@ -364,7 +391,9 @@ func (a *app) serveSpaceFile(w http.ResponseWriter, r *http.Request) {
 	allowed := secureEqual(r.Header.Get("X-Family-Token"), a.apiToken) || secureEqual(r.Header.Get("X-Admin-Token"), a.adminToken)
 	if !allowed {
 		member, ok := a.authenticateMember(r)
-		allowed = ok && member.ID == parts[1]
+		if ok {
+			allowed, _ = a.store.memberCanReadMedia(r.Context(), member.ID, parts[1], parts[3])
+		}
 	}
 	if !allowed {
 		writeError(w, http.StatusUnauthorized, "无权读取这个成员的文件")

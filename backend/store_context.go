@@ -50,6 +50,13 @@ func (s *store) memberExists(ctx context.Context, id, familyID string) (bool, er
 	return count == 1, err
 }
 
+func (s *store) memberCanReadMedia(ctx context.Context, viewerMemberID, ownerMemberID, fileName string) (bool, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM updates
+		WHERE member_id = ? AND audio_file = ? AND (visibility = 'family' OR member_id = ?)`, ownerMemberID, fileName, viewerMemberID).Scan(&count)
+	return count == 1, err
+}
+
 func (s *store) createUpdate(ctx context.Context, update Update, audioFile string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

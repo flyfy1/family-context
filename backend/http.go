@@ -180,21 +180,29 @@ func (a *app) originAllowed(origin string) bool {
 
 func (a *app) authorized(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("X-Family-Token") != a.apiToken {
-			writeError(w, http.StatusUnauthorized, "无权访问这个家庭")
+		if secureEqual(r.Header.Get("X-Family-Token"), a.apiToken) {
+			next(w, r)
 			return
 		}
-		next(w, r)
+		if member, ok := a.authenticateMember(r); ok {
+			next(w, r.WithContext(context.WithValue(r.Context(), memberContextKey{}, member)))
+			return
+		}
+		writeError(w, http.StatusUnauthorized, "无权访问这个家庭")
 	}
 }
 
 func (a *app) authorize(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("X-Family-Token") != a.apiToken {
-			writeError(w, http.StatusUnauthorized, "无权访问这个家庭")
+		if secureEqual(r.Header.Get("X-Family-Token"), a.apiToken) {
+			next.ServeHTTP(w, r)
 			return
 		}
-		next.ServeHTTP(w, r)
+		if member, ok := a.authenticateMember(r); ok {
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), memberContextKey{}, member)))
+			return
+		}
+		writeError(w, http.StatusUnauthorized, "无权访问这个家庭")
 	})
 }
 
