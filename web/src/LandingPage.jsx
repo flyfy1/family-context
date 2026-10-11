@@ -101,7 +101,7 @@ export default function LandingPage({ language, onLanguageChange }) {
   const c = copy[language] || copy.en;
   return <div className="landing-page">
     <FamilyBar product="family" name="Family Daily" homeHref="#/" locale={language}
-      languageControl={<div className="family-shell-actions"><label><span className="il-sr-only">Language</span><select value={language} onChange={event => onLanguageChange(event.target.value)} aria-label="Language"><option value="en">English</option><option value="zh">中文</option></select></label><a className="il-control" href="#/feed">{c.enter} ↗</a></div>} />
+      languageControl={<label><span className="il-sr-only">Language</span><select value={language} onChange={event => onLanguageChange(event.target.value)} aria-label="Language"><option value="en">English</option><option value="zh">中文</option></select></label>} accountControl={<a className="il-control" href="#/feed" aria-label={c.enter} title={c.enter}>{c.enter} ↗</a>} />
     <nav className="family-public-nav" aria-label={language === "zh" ? "首页导航" : "Landing navigation"}>
       {c.nav.map((label, index) => <a key={label} href={c.navTargets[index]}>{label}</a>)}
     </nav>
