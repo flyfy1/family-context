@@ -1,3 +1,6 @@
+import { FamilyBar } from '@integ-life/ui';
+import '@integ-life/ui/styles.css';
+import './shared-layout.css';
 import "./landing.css";
 import heroImage from "./assets/family-memory-hero.jpg";
 
@@ -97,16 +100,11 @@ const copy = {
 export default function LandingPage({ language, onLanguageChange }) {
   const c = copy[language] || copy.en;
   return <div className="landing-page">
-    <header className="landing-nav">
-      <a className="landing-brand" href="#/" aria-label="Family Daily home"><span>家</span><strong>Family Daily</strong></a>
-      <nav aria-label={language === "zh" ? "首页导航" : "Landing navigation"}>
-        {c.nav.map((label, index) => <a key={label} href={c.navTargets[index]}>{label}</a>)}
-      </nav>
-      <div className="landing-nav-actions">
-        <label className="landing-language"><span className="sr-only">Language</span><select value={language} onChange={event => onLanguageChange(event.target.value)} aria-label="Language"><option value="en">EN</option><option value="zh">中文</option></select></label>
-        <a className="landing-enter" href="#/feed">{c.enter} <span aria-hidden="true">↗</span></a>
-      </div>
-    </header>
+    <FamilyBar product="family" name="Family Daily" homeHref="#/" locale={language}
+      languageControl={<div className="family-shell-actions"><label><span className="il-sr-only">Language</span><select value={language} onChange={event => onLanguageChange(event.target.value)} aria-label="Language"><option value="en">English</option><option value="zh">中文</option></select></label><a className="il-control" href="#/feed">{c.enter} ↗</a></div>} />
+    <nav className="family-public-nav" aria-label={language === "zh" ? "首页导航" : "Landing navigation"}>
+      {c.nav.map((label, index) => <a key={label} href={c.navTargets[index]}>{label}</a>)}
+    </nav>
 
     <main>
       <section className="landing-hero">

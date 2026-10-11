@@ -1,0 +1,16 @@
+/* Only the public entry adopts the family shell; member and elder navigation remain local. */
+.family-shell-actions { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.family-public-nav { display:flex; flex-wrap:wrap; gap:28px; padding:12px 24px; background:var(--il-surface); border-bottom:1px solid var(--il-border); color:var(--il-text); }
+.family-public-nav a { display:inline-flex; align-items:center; min-height:36px; }
+.landing-page .il-dialog { line-height:1.5; }
+:root[data-integ-theme="dark"] .landing-page { --landing-cream:var(--il-bg); --landing-ink:var(--il-text); --landing-rust:var(--il-accent); --landing-rust-dark:var(--il-accent); --landing-sage:var(--il-muted); }
+:root[data-integ-theme="dark"] .landing-hero-copy>p,:root[data-integ-theme="dark"] .landing-private-note { color:var(--il-muted); }
+.app-shell,.login-page { color-scheme:light; }
+
+:root[data-integ-theme="dark"] .landing-page :is(.landing-visual figcaption,.landing-steps article,.landing-feature-grid article,.landing-privacy,.landing-button.ghost) { background:var(--il-surface); border-color:var(--il-border); }
+:root[data-integ-theme="dark"] .landing-page :is(.landing-intro,.landing-visual figcaption div>span,.landing-proof p,.landing-section-heading>p,.landing-steps p,.landing-feature-grid p,.landing-privacy-body,.landing-footer p,.landing-footer small,.landing-step-top>span) { color:var(--il-muted); }
+:root[data-integ-theme="dark"] .landing-page :is(.landing-kicker span,.landing-step-top i,.landing-feature-grid article>span) { background:var(--il-subtle); }
+:root[data-integ-theme="dark"] .landing-page :is(.landing-button.primary,.landing-wave,.landing-privacy-mark i,.landing-feature-grid article.featured,.landing-cta) { color:var(--il-on-accent); background:var(--il-accent); }
+:root[data-integ-theme="dark"] .landing-page :is(.landing-feature-grid .featured p,.landing-feature-grid .featured>span,.landing-cta>p,.landing-cta>span) { color:var(--il-on-accent); }
+:root[data-integ-theme="dark"] .landing-page .landing-button.light { color:var(--il-text); background:var(--il-surface); }
+:root[data-integ-theme="dark"] .landing-page .landing-privacy-mark { background:var(--il-subtle); border-color:var(--il-border); }
