@@ -11,7 +11,7 @@
     "test": "node --test src/*.test.js"
   },
   "dependencies": {
-    "@integ-life/ui": "file:vendor/integ-life-ui-0.2.0.tgz",
+    "@integ-life/ui": "file:vendor/integ-life-ui-0.3.0.tgz",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },
